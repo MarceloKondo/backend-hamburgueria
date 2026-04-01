@@ -138,3 +138,102 @@ app.post("/api/v1/licenca/desbloquear", async (req, res) => {
     await db.run("UPDATE licencas SET statusFinal='ATIVO' WHERE chave=?", [chave]);
     res.json({ ok: true });
 });
+app.post("/api/v1/licenca/ativar", async (req, res) => {
+    try {
+        const { chave, deviceId } = req.body;
+
+        if (!chave || !deviceId) {
+            return res.status(400).json({ erro: "Dados inválidos" });
+        }
+
+        const lic = await db.get("SELECT * FROM licencas WHERE chave = ?", [chave]);
+
+        if (!lic) {
+            return res.status(404).json({ erro: "Licença não encontrada" });
+        }
+
+        if (lic.statusFinal === "BLOQUEADO") {
+            return res.status(403).json({ erro: "Licença bloqueada" });
+        }
+
+        if (Date.now() > lic.expira_em) {
+            return res.status(403).json({ erro: "Licença expirada" });
+        }
+
+        // registra dispositivo
+        await db.run(
+            `UPDATE licencas 
+             SET dispositivo_id = ?, data_ativacao = ?, ultimo_uso = ?
+             WHERE chave = ?`,
+            [deviceId, Date.now(), Date.now(), chave]
+        );
+
+        res.json({
+            sucesso: true,
+            mensagem: "Licença ativada"
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao ativar licença" });
+    }
+});
+app.post("/api/v1/licenca/validar", async (req, res) => {
+    try {
+        const { chave, deviceId } = req.body;
+
+        const lic = await db.get("SELECT * FROM licencas WHERE chave = ?", [chave]);
+
+        if (!lic) return res.status(404).json({ valido: false });
+
+        if (lic.statusFinal !== "ATIVO") return res.json({ valido: false });
+
+        if (Date.now() > lic.expira_em) return res.json({ valido: false });
+
+        if (lic.dispositivo_id && lic.dispositivo_id !== deviceId) {
+            return res.json({ valido: false });
+        }
+
+        res.json({ valido: true });
+
+    } catch (err) {
+        res.status(500).json({ valido: false });
+    }
+});
+app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
+    try {
+        const { chave, nome, email, senha } = req.body;
+
+        if (!chave || !email || !senha) {
+            return res.status(400).json({ erro: "Dados inválidos" });
+        }
+
+        const lic = await db.get("SELECT * FROM licencas WHERE chave = ?", [chave]);
+
+        if (!lic) {
+            return res.status(404).json({ erro: "Licença não encontrada" });
+        }
+
+        const senhaHash = await bcrypt.hash(senha, 10);
+
+        await db.run(
+            "INSERT INTO usuarios (nome, email, senha) VALUES (?,?,?)",
+            [nome || email, email, senhaHash]
+        );
+
+        // opcional: vincular na licença
+        await db.run(
+            "UPDATE licencas SET usuario_login = ?, usuario_senha = ? WHERE chave = ?",
+            [email, senha, chave]
+        );
+
+        res.json({ sucesso: true });
+
+    } catch (err) {
+        if (err.message.includes("UNIQUE")) {
+            return res.status(400).json({ erro: "Usuário já existe" });
+        }
+
+        res.status(500).json({ erro: "Erro ao criar usuário" });
+    }
+});
