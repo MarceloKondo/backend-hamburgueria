@@ -3,214 +3,221 @@
 <head>
 <meta charset="UTF-8">
 <title>Painel SaaS</title>
+
 <style>
-body { margin:0; font-family: Arial; background:#0f172a; color:#e2e8f0; }
+body {
+    margin:0;
+    font-family: Arial;
+    background:#0f172a;
+    color:#e2e8f0;
+    padding:20px;
+}
 .hidden { display:none; }
-#loginBox { position:fixed; inset:0; display:flex; justify-content:center; align-items:center; background:#020617; }
-.login-card { background:#1e293b; padding:30px; border-radius:10px; width:320px; }
-input, button { width:100%; padding:10px; margin-top:10px; border-radius:6px; border:none; }
-button { background:#3b82f6; color:white; cursor:pointer; }
-#app { padding:20px; }
-.header { display:flex; justify-content:space-between; }
-.tabs button { width:auto; margin-right:5px; padding:8px 12px; background:#1e293b; }
-.active-tab { background:#3b82f6 !important; }
-.card { background:#1e293b; padding:15px; border-radius:8px; margin:10px 5px; display:inline-block; }
-table { width:100%; margin-top:15px; border-collapse:collapse; }
-th, td { padding:10px; border-bottom:1px solid #334155; }
-tr:hover { background:#1e293b; }
-.btn { padding:5px 8px; margin:2px; border:none; border-radius:5px; cursor:pointer; }
-.red { background:#ef4444; }
-.green { background:#22c55e; }
-.yellow { background:#eab308; color:black; }
-.blue { background:#3b82f6; }
-.gray { background:#444; }
+
+.header {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.cards {
+    display:flex;
+    gap:10px;
+    margin:20px 0;
+    flex-wrap:wrap;
+}
+
+.card {
+    background:#1e293b;
+    padding:15px;
+    border-radius:8px;
+    text-align:center;
+    min-width:120px;
+}
+
+input {
+    padding:8px;
+    margin:5px;
+    border-radius:5px;
+    border:none;
+}
+
+button {
+    padding:6px 10px;
+    margin:2px;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+.btn-blue { background:#3b82f6; color:white; }
+.btn-red { background:#ef4444; color:white; }
+.btn-green { background:#22c55e; color:white; }
+.btn-yellow { background:#eab308; color:black; }
+
+table {
+    width:100%;
+    border-collapse:collapse;
+}
+
+th, td {
+    padding:10px;
+    border-bottom:1px solid #334155;
+}
+
+.login-box {
+    max-width:300px;
+    margin:100px auto;
+    text-align:center;
+}
 </style>
 </head>
+
 <body>
 
-<!-- LOGIN -->
-<div id="loginBox">
-    <div class="login-card">
-        <h2>🔐 Login</h2>
-        <input id="email" placeholder="Email">
-        <input id="senha" type="password" placeholder="Senha">
-        <button onclick="login()">Entrar</button>
-    </div>
+<div id="loginBox" class="login-box">
+    <h2>🔐 Login Painel</h2>
+    <input id="senha" type="password" placeholder="Senha"><br>
+    <button class="btn-blue" onclick="login()">Entrar</button>
 </div>
 
-<!-- APP -->
-<div id="app" class="hidden">
-    <div class="header">
-        <h2>📊 Painel SaaS</h2>
-        <button onclick="logout()" class="red">Sair</button>
-    </div>
+<div id="painel" class="hidden">
 
-    <div class="tabs">
-        <button id="tabLicencas" class="active-tab" onclick="trocarTab('licencas')">Licenças</button>
-        <button id="tabEventos" onclick="trocarTab('eventos')">Eventos</button>
-    </div>
+<div class="header">
+    <h2>📊 Painel SaaS</h2>
+    <button onclick="logout()" class="btn-red">Sair</button>
+</div>
 
-    <!-- LICENÇAS -->
-    <div id="licencas">
-        <div id="cards"></div>
-        <h3>Gerar Licença</h3>
-        <input id="cliente" placeholder="Cliente">
-        <input id="dias" placeholder="Dias">
-        <button onclick="gerar()">Gerar</button>
-        <table id="tabela"></table>
-    </div>
+<div class="cards" id="cards"></div>
 
-    <!-- EVENTOS -->
-    <div id="eventos" class="hidden">
-        <h3>📡 Eventos do App</h3>
-        <table id="tabelaEventos"></table>
-    </div>
+<h3>➕ Gerar Licença</h3>
+<input id="cliente" placeholder="Cliente">
+<input id="dias" placeholder="Dias">
+<button class="btn-blue" onclick="gerar()">Gerar</button>
+
+<table id="tabela"></table>
+
 </div>
 
 <script>
-const API = "http://192.168.15.10:3000/api/v1";
-const AUTH = "http://192.168.15.10:3000/auth/login";
-let TOKEN = localStorage.getItem("token");
+
+// 🔥 USA MESMO DOMÍNIO (FUNCIONA NO RENDER)
+const API = "/api/v1/licenca";
+
+// 🔐 senha simples (troca depois se quiser)
+const SENHA = "1234";
 
 // ================= LOGIN =================
-async function login() {
-    const email = document.getElementById("email").value.trim();
-    const senha = document.getElementById("senha").value;
-    if(!email || !senha){ alert("Preencha email e senha"); return; }
-
-    try {
-        const res = await fetch(AUTH,{
-            method:"POST",
-            headers:{ "Content-Type":"application/json" },
-            body: JSON.stringify({email, senha})
-        });
-        if(!res.ok){
-            const err = await res.json();
-            alert(err.erro || "Login inválido");
-            return;
-        }
-        const data = await res.json();
-        TOKEN = data.token;
-        localStorage.setItem("token", TOKEN);
-        iniciarApp();
-    } catch(e){
-        console.error(e);
-        alert("Erro ao conectar com o servidor");
+function login(){
+    const s = document.getElementById("senha").value;
+    if(s === SENHA){
+        localStorage.setItem("auth", "ok");
+        iniciarPainel();
+    } else {
+        alert("Senha incorreta");
     }
 }
 
-// ================= INIT =================
-function iniciarApp(){
-    document.getElementById("loginBox").classList.add("hidden");
-    document.getElementById("app").classList.remove("hidden");
-    carregarLicencas();
+function logout(){
+    localStorage.removeItem("auth");
+    location.reload();
 }
 
-// ================= AUTH =================
-function auth(){
-    return {
-        "Content-Type":"application/json",
-        "Authorization":"Bearer "+TOKEN
-    }
+function iniciarPainel(){
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("painel").style.display = "block";
+    carregar();
 }
 
-// ================= TABS =================
-function trocarTab(tab){
-    document.getElementById("licencas").classList.add("hidden");
-    document.getElementById("eventos").classList.add("hidden");
-    document.getElementById("tabLicencas").classList.remove("active-tab");
-    document.getElementById("tabEventos").classList.remove("active-tab");
-    if(tab==="licencas"){
-        document.getElementById("licencas").classList.remove("hidden");
-        document.getElementById("tabLicencas").classList.add("active-tab");
-    }else{
-        document.getElementById("eventos").classList.remove("hidden");
-        document.getElementById("tabEventos").classList.add("active-tab");
-        carregarEventos();
-    }
-}
-
-// ================= LICENÇAS =================
-async function carregarLicencas(){
-    try {
-        const res = await fetch(API+"/licenca/painel",{ headers:auth() });
-        if(res.status===401){ logout(); return; }
+// ================= API =================
+async function carregar(){
+    try{
+        const res = await fetch(API + "/painel");
         const dados = await res.json();
 
         let ativos=0, expirados=0, bloqueados=0;
+
         let html = "<tr><th>Cliente</th><th>Status</th><th>Chave</th><th>Dias</th><th>Ações</th></tr>";
 
         dados.forEach(l=>{
+
             if(l.statusFinal==="ATIVO") ativos++;
             if(l.statusFinal==="EXPIRADO") expirados++;
             if(l.statusFinal==="BLOQUEADO") bloqueados++;
-            let dias = Math.ceil((l.expira_em - Date.now())/86400000); if(dias<0) dias=0;
-            html+=`
+
+            let dias = Math.ceil((l.expira_em - Date.now()) / 86400000);
+            if(isNaN(dias) || dias < 0) dias = 0;
+
+            html += `
             <tr>
-                <td>${l.cliente_nome||"-"}</td>
+                <td>${l.cliente_nome || "-"}</td>
                 <td>${l.statusFinal}</td>
-                <td>${l.chave} <button onclick="copiar('${l.chave}')">📋</button></td>
+                <td>${l.chave}</td>
                 <td>${dias}</td>
                 <td>
-                    <button class="btn red" onclick="bloquear('${l.chave}')">Bloq</button>
-                    <button class="btn green" onclick="desbloquear('${l.chave}')">OK</button>
-                    <button class="btn yellow" onclick="resetar('${l.chave}')">Reset</button>
+                    <button class="btn-red" onclick="bloquear('${l.chave}')">Bloq</button>
+                    <button class="btn-green" onclick="desbloquear('${l.chave}')">OK</button>
+                    <button class="btn-blue" onclick="copiar('${l.chave}')">📋</button>
                 </td>
             </tr>`;
         });
 
         document.getElementById("tabela").innerHTML = html;
-        document.getElementById("cards").innerHTML = `
-            <div class="card">Ativos ${ativos}</div>
-            <div class="card">Expirados ${expirados}</div>
-            <div class="card">Bloqueados ${bloqueados}</div>
-        `;
-    } catch(e){ console.error(e); }
-}
 
-// ================= EVENTOS =================
-async function carregarEventos(){
-    try{
-        const res = await fetch(API+"/evento",{ headers:auth() });
-        if(res.status===401){ logout(); return; }
-        const dados = await res.json();
-        let html = "<tr><th>Tipo</th><th>Email</th><th>Device</th><th>Data</th></tr>";
-        dados.forEach(e=>{
-            html+=`
-            <tr>
-                <td>${e.tipo}</td>
-                <td>${e.email}</td>
-                <td>${e.device_id}</td>
-                <td>${new Date(e.data).toLocaleString()}</td>
-            </tr>`;
-        });
-        document.getElementById("tabelaEventos").innerHTML = html;
-    }catch(e){ console.error(e); }
+        document.getElementById("cards").innerHTML = `
+            <div class="card">Ativos<br>${ativos}</div>
+            <div class="card">Expirados<br>${expirados}</div>
+            <div class="card">Bloqueados<br>${bloqueados}</div>
+        `;
+    }catch(err){
+        console.log(err);
+        alert("Erro ao carregar painel");
+    }
 }
 
 // ================= AÇÕES =================
 async function gerar(){
-    await fetch(API+"/licenca/gerar",{
+    const diasInput = parseInt(document.getElementById("dias").value);
+
+    await fetch(API+"/gerar",{
         method:"POST",
-        headers:auth(),
+        headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
             cliente:document.getElementById("cliente").value,
-            dias:parseInt(document.getElementById("dias").value)
+            dias: isNaN(diasInput) ? 30 : diasInput
         })
     });
-    carregarLicencas();
+
+    carregar();
 }
 
-async function bloquear(c){ await fetch(API+"/licenca/bloquear",{ method:"POST", headers:auth(), body: JSON.stringify({chave:c}) }); carregarLicencas(); }
-async function desbloquear(c){ await fetch(API+"/licenca/desbloquear",{ method:"POST", headers:auth(), body: JSON.stringify({chave:c}) }); carregarLicencas(); }
-async function resetar(c){ await fetch(API+"/licenca/resetar-dispositivos",{ method:"POST", headers:auth(), body: JSON.stringify({chave:c}) }); carregarLicencas(); }
+async function bloquear(c){
+    await fetch(API+"/bloquear",{ 
+        method:"POST", 
+        headers:{"Content-Type":"application/json"}, 
+        body: JSON.stringify({chave:c}) 
+    });
+    carregar();
+}
 
-// ================= UTIL =================
-function copiar(text){ navigator.clipboard.writeText(text); alert("Copiado!"); }
-function logout(){ localStorage.removeItem("token"); location.reload(); }
+async function desbloquear(c){
+    await fetch(API+"/desbloquear",{ 
+        method:"POST", 
+        headers:{"Content-Type":"application/json"}, 
+        body: JSON.stringify({chave:c}) 
+    });
+    carregar();
+}
 
-// ================= AUTO LOGIN =================
-if(TOKEN) iniciarApp();
+function copiar(c){
+    navigator.clipboard.writeText(c);
+    alert("Copiado!");
+}
+
+// ================= INIT =================
+if(localStorage.getItem("auth") === "ok"){
+    iniciarPainel();
+}
 </script>
 
 </body>
