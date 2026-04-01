@@ -53,10 +53,11 @@ async function startServer() {
     `);
 
     console.log("Banco pronto");
+const PORT = process.env.PORT || 3000;
 
-    app.listen(3000, "192.168.15.10", () => {
-        console.log("Servidor rodando em http://192.168.15.10:3000");
-    });
+app.listen(PORT, () => {
+  console.log('Servidor rodando na porta ' + PORT);
+});
 }
 startServer();
 
