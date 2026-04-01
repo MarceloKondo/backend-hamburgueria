@@ -1,65 +1,187 @@
-// server.js
+// =============================
+// SERVER.JS - POSTGRES COMPLETO
+// =============================
+
 const express = require("express");
 const cors = require("cors");
-const sqlite3 = require("sqlite3");
-const { open } = require("sqlite");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const { Pool } = require("pg");
 
 const app = express();
 app.use(cors());
-app.use(express.json()); // importante para req.body
+app.use(express.json());
 app.use(express.static("public"));
+
 const SECRET = "SUPER_SECRET_KEY";
 
-// ==========================
-// 🔹 DB CONFIG
-// ==========================
-let db;
+// =============================
+// 🔹 POSTGRES CONFIG
+// =============================
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
 
+// =============================
+// 🔹 INIT DB
+// =============================
 async function startServer() {
-    db = await open({
-        filename: "./licencas.db",
-        driver: sqlite3.Database
-    });
 
-    // 🔹 Tabela usuarios
-    await db.exec(`
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             nome TEXT,
-            email TEXT UNIQUE COLLATE NOCASE,
+            email TEXT UNIQUE,
             senha TEXT,
-            criado_em INTEGER DEFAULT (strftime('%s','now'))
-        )
+            criado_em BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
+        );
     `);
 
-    // 🔹 Tabela licencas
-    await db.exec(`
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS licencas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             cliente_nome TEXT,
             chave TEXT UNIQUE,
             statusFinal TEXT,
-            expira_em INTEGER,
+            expira_em BIGINT,
             dispositivos INTEGER DEFAULT 0,
             dispositivo_id TEXT,
             usuario_login TEXT,
             usuario_senha TEXT,
-            ultimo_uso INTEGER,
-            data_ativacao INTEGER,
+            ultimo_uso BIGINT,
+            data_ativacao BIGINT,
             tentativas_invalidas INTEGER DEFAULT 0
-        )
+        );
     `);
 
-    console.log("Banco pronto");
-const PORT = process.env.PORT || 3000;
+    console.log("Postgres conectado");
 
-app.listen(PORT, () => {
-  console.log('Servidor rodando na porta ' + PORT);
-});
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log("Servidor rodando na porta " + PORT);
+    });
 }
+
 startServer();
+
+// =============================
+// 🔹 LOGIN
+// =============================
+app.post("/auth/login", async (req, res) => {
+    try {
+        const { email, senha } = req.body;
+
+        const result = await pool.query(
+            "SELECT * FROM usuarios WHERE LOWER(email)=LOWER($1)",
+            [email]
+        );
+
+        const usuario = result.rows[0];
+
+        if (!usuario) return res.status(401).json({ erro: "Usuário não encontrado" });
+
+        const senhaValida = await bcrypt.compare(senha, usuario.senha);
+        if (!senhaValida) return res.status(401).json({ erro: "Senha inválida" });
+
+        const token = jwt.sign({ id: usuario.id }, SECRET, { expiresIn: "1h" });
+
+        res.json({ token });
+
+    } catch (err) {
+        res.status(500).json({ erro: "Erro interno" });
+    }
+});
+
+// =============================
+// 🔹 LICENÇAS
+// =============================
+app.get("/api/v1/licenca/painel", async (req, res) => {
+    const { rows } = await pool.query("SELECT * FROM licencas ORDER BY id DESC");
+    res.json(rows);
+});
+
+app.post("/api/v1/licenca/gerar", async (req, res) => {
+    const { cliente, dias } = req.body;
+
+    const chave = require("crypto").randomBytes(16).toString("hex");
+    const expira_em = Date.now() + dias * 86400000;
+
+    await pool.query(
+        "INSERT INTO licencas (cliente_nome, chave, statusFinal, expira_em) VALUES ($1,$2,$3,$4)",
+        [cliente, chave, "ATIVO", expira_em]
+    );
+
+    res.json({ ok: true, chave });
+});
+
+app.post("/api/v1/licenca/bloquear", async (req, res) => {
+    const { chave } = req.body;
+    await pool.query("UPDATE licencas SET statusFinal='BLOQUEADO' WHERE chave=$1", [chave]);
+    res.json({ ok: true });
+});
+
+app.post("/api/v1/licenca/desbloquear", async (req, res) => {
+    const { chave } = req.body;
+    await pool.query("UPDATE licencas SET statusFinal='ATIVO' WHERE chave=$1", [chave]);
+    res.json({ ok: true });
+});
+
+app.post("/api/v1/licenca/ativar", async (req, res) => {
+    const { chave, deviceId } = req.body;
+
+    const { rows } = await pool.query("SELECT * FROM licencas WHERE chave=$1", [chave]);
+    const lic = rows[0];
+
+    if (!lic) return res.status(404).json({ erro: "Licença não encontrada" });
+    if (lic.statusfinal === "BLOQUEADO") return res.status(403).json({ erro: "Bloqueado" });
+    if (Date.now() > lic.expira_em) return res.status(403).json({ erro: "Expirada" });
+
+    await pool.query(
+        "UPDATE licencas SET dispositivo_id=$1, data_ativacao=$2, ultimo_uso=$3 WHERE chave=$4",
+        [deviceId, Date.now(), Date.now(), chave]
+    );
+
+    res.json({ sucesso: true });
+});
+
+app.post("/api/v1/licenca/validar", async (req, res) => {
+    const { chave, deviceId } = req.body;
+
+    const { rows } = await pool.query("SELECT * FROM licencas WHERE chave=$1", [chave]);
+    const lic = rows[0];
+
+    if (!lic) return res.json({ valido: false });
+    if (lic.statusfinal !== "ATIVO") return res.json({ valido: false });
+    if (Date.now() > lic.expira_em) return res.json({ valido: false });
+    if (lic.dispositivo_id && lic.dispositivo_id !== deviceId) return res.json({ valido: false });
+
+    res.json({ valido: true });
+});
+
+app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
+    try {
+        const { chave, nome, email, senha } = req.body;
+
+        const senhaHash = await bcrypt.hash(senha, 10);
+
+        await pool.query(
+            "INSERT INTO usuarios (nome, email, senha) VALUES ($1,$2,$3)",
+            [nome, email, senhaHash]
+        );
+
+        await pool.query(
+            "UPDATE licencas SET usuario_login=$1, usuario_senha=$2 WHERE chave=$3",
+            [email, senha, chave]
+        );
+
+        res.json({ sucesso: true });
+
+    } catch (err) {
+        res.status(500).json({ erro: "Erro ao criar usuário" });
+    }
+});
+        startServer();
 
 // ==========================
 // 🔹 LOGIN USUARIOS
