@@ -207,19 +207,26 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         const senhaHash = await bcrypt.hash(senha, 10);
 
-        await db.run(
-            "INSERT INTO usuarios (nome, email, senha) VALUES (?,?,?)",
+        // 🔥 AGORA USA POSTGRES
+        await pool.query(
+            "INSERT INTO usuarios (nome, email, senha) VALUES ($1,$2,$3)",
             [nome || email, email, senhaHash]
         );
 
-        await db.run(
-            "UPDATE licencas SET usuario_login = ?, usuario_senha = ? WHERE chave = ?",
+        await pool.query(
+            "UPDATE licencas SET usuario_login=$1, usuario_senha=$2 WHERE chave=$3",
             [email, senha, chave]
         );
 
         res.json({ sucesso: true });
 
     } catch (err) {
+
+        if (err.message.includes("duplicate")) {
+            return res.status(400).json({ erro: "Usuário já existe" });
+        }
+
+        console.error(err);
         res.status(500).json({ erro: "Erro ao criar usuário" });
     }
 });
