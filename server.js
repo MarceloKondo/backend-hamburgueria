@@ -1,5 +1,5 @@
 // =============================
-// SERVER.JS - LIMPO
+// SERVER.JS COMPLETO (OK)
 // =============================
 
 const express = require("express");
@@ -16,7 +16,7 @@ app.use(express.static("public"));
 const SECRET = "SUPER_SECRET_KEY";
 
 // =============================
-// 🔹 POSTGRES CONFIG (POOL)
+// 🔹 POSTGRES CONFIG
 // =============================
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -24,7 +24,7 @@ const pool = new Pool({
 });
 
 // =============================
-// 🔹 INIT DB (POSTGRES)
+// 🔹 INIT DB
 // =============================
 async function startServer() {
 
@@ -55,6 +55,17 @@ async function startServer() {
         );
     `);
 
+    // 🔥 NOVO: EVENTOS
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS eventos (
+            id SERIAL PRIMARY KEY,
+            tipo TEXT,
+            email TEXT,
+            device_id TEXT,
+            data BIGINT
+        );
+    `);
+
     console.log("Postgres conectado");
 
     const PORT = process.env.PORT || 3000;
@@ -67,7 +78,7 @@ startServer();
 
 
 // =============================
-// 🔹 LOGIN (POSTGRES)
+// 🔹 LOGIN
 // =============================
 app.post("/auth/login", async (req, res) => {
     try {
@@ -92,7 +103,6 @@ app.post("/auth/login", async (req, res) => {
 
         const token = jwt.sign({ id: usuario.id }, SECRET, { expiresIn: "1h" });
 
-        // 🔥 AQUI ESTÁ A CORREÇÃO
         res.json({
             token,
             usuario: {
@@ -110,7 +120,7 @@ app.post("/auth/login", async (req, res) => {
 
 
 // =============================
-// 🔹 LICENÇA - PAINEL (POOL)
+// 🔹 PAINEL
 // =============================
 app.get("/api/v1/licenca/painel", async (req, res) => {
     const { rows } = await pool.query("SELECT * FROM licencas ORDER BY id DESC");
@@ -119,7 +129,7 @@ app.get("/api/v1/licenca/painel", async (req, res) => {
 
 
 // =============================
-// 🔹 GERAR LICENÇA (POOL)
+// 🔹 GERAR
 // =============================
 app.post("/api/v1/licenca/gerar", async (req, res) => {
     const { cliente, dias } = req.body;
@@ -137,7 +147,7 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
 
 
 // =============================
-// 🔹 BLOQUEAR / DESBLOQUEAR (POOL)
+// 🔹 BLOQUEAR / DESBLOQUEAR
 // =============================
 app.post("/api/v1/licenca/bloquear", async (req, res) => {
     const { chave } = req.body;
@@ -153,7 +163,7 @@ app.post("/api/v1/licenca/desbloquear", async (req, res) => {
 
 
 // =============================
-// 🔹 ATIVAR LICENÇA (POOL)
+// 🔹 ATIVAR
 // =============================
 app.post("/api/v1/licenca/ativar", async (req, res) => {
     const { chave, deviceId } = req.body;
@@ -162,7 +172,7 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
     const lic = rows[0];
 
     if (!lic) return res.status(404).json({ erro: "Licença não encontrada" });
-    if (lic.statusfinal === "BLOQUEADO") return res.status(403).json({ erro: "Bloqueado" });
+    if (lic.statusFinal === "BLOQUEADO") return res.status(403).json({ erro: "Bloqueado" });
     if (Date.now() > lic.expira_em) return res.status(403).json({ erro: "Expirada" });
 
     await pool.query(
@@ -175,7 +185,7 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
 
 
 // =============================
-// 🔥 VALIDAR LICENÇA (CORRIGIDO)
+// 🔥 VALIDAR (CORRIGIDO)
 // =============================
 app.post("/api/v1/licenca/validar", async (req, res) => {
     try {
@@ -190,7 +200,7 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
 
         if (!lic) return res.json({ valida: false });
 
-        if (lic.statusfinal !== "ATIVO") return res.json({ valida: false });
+        if (lic.statusFinal !== "ATIVO") return res.json({ valida: false });
 
         if (Date.now() > lic.expira_em) return res.json({ valida: false });
 
@@ -198,10 +208,9 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
             return res.json({ valida: false });
         }
 
-        // 🔥 AGORA ENVIA TUDO CERTO PRO APP
         res.json({
             valida: true,
-            status: lic.statusfinal,
+            status: lic.statusFinal,
             dataValidade: lic.expira_em
         });
 
@@ -213,7 +222,126 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
 
 
 // =============================
-// 🔹 CRIAR USUÁRIO (MANTIDO COM DB)
+// 🔹 EVENTOS (APP ENVIA)
+// =============================
+app.post("/api/v1/licenca/evento", async (req, res) => {
+    try {
+        const { evento, email, deviceId, dataAtivacao } = req.body;
+
+        await pool.query(
+            "INSERT INTO eventos (tipo, email, device_id, data) VALUES ($1,$2,$3,$4)",
+            [
+                evento,
+                email || null,
+                deviceId || null,
+                dataAtivacao || Date.now()
+            ]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao salvar evento" });
+    }
+});
+
+
+// =============================
+// 🔹 EVENTOS (PAINEL)
+// =============================
+app.get("/api/v1/licenca/evento", async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            "SELECT * FROM eventos ORDER BY id DESC LIMIT 100"
+        );
+
+        res.json(rows);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao buscar eventos" });
+    }
+});
+
+
+// =============================
+// 🔹 DELETAR
+// =============================
+app.post("/api/v1/licenca/deletar", async (req, res) => {
+    try {
+        const { chave } = req.body;
+
+        await pool.query(
+            "DELETE FROM licencas WHERE chave=$1",
+            [chave]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao deletar" });
+    }
+});
+
+
+// =============================
+// 🔹 RESETAR DISPOSITIVO
+// =============================
+app.post("/api/v1/licenca/resetar-dispositivos", async (req, res) => {
+    try {
+        const { chave } = req.body;
+
+        await pool.query(
+            "UPDATE licencas SET dispositivo_id=NULL WHERE chave=$1",
+            [chave]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao resetar" });
+    }
+});
+
+
+// =============================
+// 🔹 RENOVAR
+// =============================
+app.post("/api/v1/licenca/renovar", async (req, res) => {
+    try {
+        const { chave, dias } = req.body;
+
+        const { rows } = await pool.query(
+            "SELECT expira_em FROM licencas WHERE chave=$1",
+            [chave]
+        );
+
+        if (!rows.length) {
+            return res.status(404).json({ erro: "Licença não encontrada" });
+        }
+
+        const atual = rows[0].expira_em;
+        const novaData = Math.max(atual, Date.now()) + (dias * 86400000);
+
+        await pool.query(
+            "UPDATE licencas SET expira_em=$1 WHERE chave=$2",
+            [novaData, chave]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao renovar" });
+    }
+});
+
+
+// =============================
+// 🔹 CRIAR USUÁRIO
 // =============================
 app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
     try {
@@ -221,7 +349,6 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         const senhaHash = await bcrypt.hash(senha, 10);
 
-        // 🔥 AGORA USA POSTGRES
         await pool.query(
             "INSERT INTO usuarios (nome, email, senha) VALUES ($1,$2,$3)",
             [nome || email, email, senhaHash]
