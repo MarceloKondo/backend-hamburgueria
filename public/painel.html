@@ -54,6 +54,9 @@ button {
 .btn-red { background:#ef4444; color:white; }
 .btn-green { background:#22c55e; color:white; }
 .btn-yellow { background:#eab308; color:black; }
+.btn-copy { background:#444; color:white; }
+
+#eventos { margin-top:20px; }
 
 table {
     width:100%;
@@ -85,29 +88,36 @@ th, td {
 
 <div class="header">
     <h2>📊 Painel SaaS</h2>
-    <button onclick="logout()" class="btn-red">Sair</button>
+    <div>
+        <button onclick="trocarTab('licencas')" class="btn-blue">Licenças</button>
+        <button onclick="trocarTab('eventos')" class="btn-yellow">Eventos</button>
+        <button onclick="logout()" class="btn-red">Sair</button>
+    </div>
 </div>
 
 <div class="cards" id="cards"></div>
 
-<h3>➕ Gerar Licença</h3>
-<input id="cliente" placeholder="Cliente">
-<input id="dias" placeholder="Dias">
-<button class="btn-blue" onclick="gerar()">Gerar</button>
+<div id="licencasBox">
+    <h3>➕ Gerar Licença</h3>
+    <input id="cliente" placeholder="Cliente">
+    <input id="dias" placeholder="Dias">
+    <button class="btn-blue" onclick="gerar()">Gerar</button>
 
-<table id="tabela"></table>
+    <table id="tabela"></table>
+</div>
+
+<div id="eventos" class="hidden">
+    <h3>📡 Eventos</h3>
+    <table id="tabelaEventos"></table>
+</div>
 
 </div>
 
 <script>
 
-// 🔥 USA MESMO DOMÍNIO (FUNCIONA NO RENDER)
 const API = "/api/v1/licenca";
-
-// 🔐 senha simples (troca depois se quiser)
 const SENHA = "Mk@td040184";
 
-// ================= LOGIN =================
 function login(){
     const s = document.getElementById("senha").value;
     if(s === SENHA){
@@ -129,7 +139,20 @@ function iniciarPainel(){
     carregar();
 }
 
-// ================= API =================
+function trocarTab(tab){
+    const lic = document.getElementById("licencasBox");
+    const evt = document.getElementById("eventos");
+
+    if(tab === "eventos"){
+        lic.style.display = "none";
+        evt.style.display = "block";
+        carregarEventos();
+    } else {
+        lic.style.display = "block";
+        evt.style.display = "none";
+    }
+}
+
 async function carregar(){
     try{
         const res = await fetch(API + "/painel");
@@ -157,6 +180,9 @@ async function carregar(){
                 <td>
                     <button class="btn-red" onclick="bloquear('${l.chave}')">Bloq</button>
                     <button class="btn-green" onclick="desbloquear('${l.chave}')">OK</button>
+                    <button class="btn-yellow" onclick="resetar('${l.chave}')">Reset</button>
+                    <button class="btn-blue" onclick="renovar('${l.chave}')">+30d</button>
+                    <button class="btn-red" onclick="deletar('${l.chave}')">Del</button>
                     <button class="btn-blue" onclick="copiar('${l.chave}')">📋</button>
                 </td>
             </tr>`;
@@ -175,7 +201,30 @@ async function carregar(){
     }
 }
 
-// ================= AÇÕES =================
+async function carregarEventos(){
+    try{
+        const res = await fetch(API + "/evento");
+        const dados = await res.json();
+
+        let html = "<tr><th>Tipo</th><th>Email</th><th>Device</th><th>Data</th></tr>";
+
+        dados.reverse().forEach(e=>{
+            html += `
+            <tr>
+                <td>${e.tipo}</td>
+                <td>${e.email || "-"}</td>
+                <td>${e.device_id || "-"}</td>
+                <td>${new Date(e.data).toLocaleString()}</td>
+            </tr>`;
+        });
+
+        document.getElementById("tabelaEventos").innerHTML = html;
+
+    }catch(err){
+        console.log(err);
+    }
+}
+
 async function gerar(){
     const diasInput = parseInt(document.getElementById("dias").value);
 
@@ -192,20 +241,28 @@ async function gerar(){
 }
 
 async function bloquear(c){
-    await fetch(API+"/bloquear",{ 
-        method:"POST", 
-        headers:{"Content-Type":"application/json"}, 
-        body: JSON.stringify({chave:c}) 
-    });
+    await fetch(API+"/bloquear",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
     carregar();
 }
 
 async function desbloquear(c){
-    await fetch(API+"/desbloquear",{ 
-        method:"POST", 
-        headers:{"Content-Type":"application/json"}, 
-        body: JSON.stringify({chave:c}) 
-    });
+    await fetch(API+"/desbloquear",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
+    carregar();
+}
+
+async function resetar(c){
+    await fetch(API+"/resetar-dispositivos",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
+    carregar();
+}
+
+async function renovar(c){
+    await fetch(API+"/renovar",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c,dias:30}) });
+    carregar();
+}
+
+async function deletar(c){
+    if(!confirm("Excluir licença?")) return;
+    await fetch(API+"/deletar",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
     carregar();
 }
 
@@ -214,10 +271,19 @@ function copiar(c){
     alert("Copiado!");
 }
 
-// ================= INIT =================
+setInterval(()=>{
+    if(localStorage.getItem("auth") === "ok"){
+        carregar();
+        if(document.getElementById("eventos").style.display === "block"){
+            carregarEventos();
+        }
+    }
+}, 3000);
+
 if(localStorage.getItem("auth") === "ok"){
     iniciarPainel();
 }
+
 </script>
 
 </body>
