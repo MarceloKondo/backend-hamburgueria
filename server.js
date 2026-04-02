@@ -370,6 +370,7 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
         console.error(err);
         res.status(500).json({ erro: "Erro ao criar usuário" });
     }
+});
 // =============================
 // 🔹 USUÁRIOS (PAINEL)
 // =============================
