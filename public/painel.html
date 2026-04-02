@@ -92,6 +92,7 @@ th, td {
         <button onclick="trocarTab('licencas')" class="btn-blue">Licenças</button>
         <button onclick="trocarTab('eventos')" class="btn-yellow">Eventos</button>
         <button onclick="logout()" class="btn-red">Sair</button>
+        <button onclick="trocarTab('usuarios')" class="btn-green">Usuários</button>
     </div>
 </div>
 
@@ -110,6 +111,11 @@ th, td {
     <h3>📡 Eventos</h3>
     <table id="tabelaEventos"></table>
 </div>
+    
+    <div id="usuarios" class="hidden">
+    <h3>👤 Usuários</h3>
+    <table id="tabelaUsuarios"></table>
+    </div>
 
 </div>
 
@@ -142,14 +148,22 @@ function iniciarPainel(){
 function trocarTab(tab){
     const lic = document.getElementById("licencasBox");
     const evt = document.getElementById("eventos");
+    const usr = document.getElementById("usuarios");
+
+    lic.style.display = "none";
+    evt.style.display = "none";
+    usr.style.display = "none";
 
     if(tab === "eventos"){
-        lic.style.display = "none";
         evt.style.display = "block";
         carregarEventos();
-    } else {
+    } 
+    else if(tab === "usuarios"){
+        usr.style.display = "block";
+        carregarUsuarios();
+    }
+    else {
         lic.style.display = "block";
-        evt.style.display = "none";
     }
 }
 
@@ -245,6 +259,59 @@ async function bloquear(c){
     carregar();
 }
 
+async function carregarUsuarios(){
+    try{
+        const res = await fetch(API + "/usuarios");
+        const dados = await res.json();
+
+        let html = "<tr><th>Nome</th><th>Email</th><th>Criado</th><th>Ações</th></tr>";
+
+        dados.forEach(u=>{
+            html += `
+            <tr>
+                <td>${u.nome}</td>
+                <td>${u.email}</td>
+                <td>${new Date(u.criado_em * 1000).toLocaleString()}</td>
+                <td>
+                    <button class="btn-yellow" onclick="resetarSenha(${u.id})">Senha</button>
+                    <button class="btn-red" onclick="deletarUsuario(${u.id})">Del</button>
+                </td>
+            </tr>`;
+        });
+
+        document.getElementById("tabelaUsuarios").innerHTML = html;
+
+    }catch(err){
+        console.log(err);
+        alert("Erro ao carregar usuários");
+    }
+}
+
+    async function deletarUsuario(id){
+    if(!confirm("Excluir usuário?")) return;
+
+    await fetch(API + "/deletar-usuario", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ id })
+    });
+
+    carregarUsuarios();
+}
+
+async function resetarSenha(id){
+    const nova = prompt("Nova senha:");
+    if(!nova) return;
+
+    await fetch(API + "/resetar-senha", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ id, novaSenha: nova })
+    });
+
+    alert("Senha atualizada!");
+}
+    
 async function desbloquear(c){
     await fetch(API+"/desbloquear",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
     carregar();
