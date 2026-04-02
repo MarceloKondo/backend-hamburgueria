@@ -80,16 +80,30 @@ app.post("/auth/login", async (req, res) => {
 
         const usuario = result.rows[0];
 
-        if (!usuario) return res.status(401).json({ erro: "Usuário não encontrado" });
+        if (!usuario) {
+            return res.status(401).json({ erro: "Usuário não encontrado" });
+        }
 
         const senhaValida = await bcrypt.compare(senha, usuario.senha);
-        if (!senhaValida) return res.status(401).json({ erro: "Senha inválida" });
+
+        if (!senhaValida) {
+            return res.status(401).json({ erro: "Senha inválida" });
+        }
 
         const token = jwt.sign({ id: usuario.id }, SECRET, { expiresIn: "1h" });
 
-        res.json({ token });
+        // 🔥 AQUI ESTÁ A CORREÇÃO
+        res.json({
+            token,
+            usuario: {
+                id: usuario.id,
+                nome: usuario.nome,
+                email: usuario.email
+            }
+        });
 
     } catch (err) {
+        console.error(err);
         res.status(500).json({ erro: "Erro interno" });
     }
 });
