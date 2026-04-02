@@ -181,7 +181,6 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
         res.status(500).json({ erro: "Erro ao criar usuário" });
     }
 });
-        startServer();
 
 // ==========================
 // 🔹 LOGIN USUARIOS
