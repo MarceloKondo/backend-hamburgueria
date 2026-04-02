@@ -370,4 +370,61 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
         console.error(err);
         res.status(500).json({ erro: "Erro ao criar usuário" });
     }
+// =============================
+// 🔹 USUÁRIOS (PAINEL)
+// =============================
+
+// LISTAR USUÁRIOS
+app.get("/api/v1/licenca/usuarios", async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            "SELECT id, nome, email, criado_em FROM usuarios ORDER BY id DESC"
+        );
+
+        res.json(rows);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao listar usuários" });
+    }
+});
+
+
+// DELETAR USUÁRIO
+app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
+    try {
+        const { id } = req.body;
+
+        await pool.query(
+            "DELETE FROM usuarios WHERE id=$1",
+            [id]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao deletar usuário" });
+    }
+});
+
+
+// RESETAR SENHA
+app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
+    try {
+        const { id, novaSenha } = req.body;
+
+        const hash = await bcrypt.hash(novaSenha, 10);
+
+        await pool.query(
+            "UPDATE usuarios SET senha=$1 WHERE id=$2",
+            [hash, id]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao resetar senha" });
+    }
 });
