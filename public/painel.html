@@ -168,105 +168,38 @@ function trocarTab(tab){
 }
 
 async function carregar(){
-    try{
-        const res = await fetch(API + "/painel");
-        const dados = await res.json();
+    const res = await fetch(API + "/painel");
+    const dados = await res.json();
 
-        let ativos=0, expirados=0, bloqueados=0;
+    let html = "<tr><th>Cliente</th><th>Status</th><th>Chave</th><th>Dias</th><th>Ações</th></tr>";
 
-        let html = "<tr><th>Cliente</th><th>Status</th><th>Chave</th><th>Dias</th><th>Ações</th></tr>";
+    dados.forEach(l=>{
 
-        dados.forEach(l=>{
+        const status = l.statusFinal || l.status || "DESCONHECIDO";
 
-            const status = l.statusFinal || l.status || "DESCONHECIDO";
+        // 🔥 CORREÇÃO DO +1 DIA
+        let diff = (l.expira_em || 0) - Date.now();
+        let dias = Math.floor(diff / 86400000);
+        if(isNaN(dias) || dias < 0) dias = 0;
 
-            if(status==="ATIVO") ativos++;
-            if(status==="EXPIRADO") expirados++;
-            if(status==="BLOQUEADO") bloqueados++;
+        html += `
+        <tr>
+            <td>${l.cliente_nome || "-"}</td>
+            <td>${status}</td>
+            <td>${l.chave || "-"}</td>
+            <td>${dias}</td>
+            <td>
+                <button class="btn-red" onclick="bloquear('${l.chave}')">Bloq</button>
+                <button class="btn-green" onclick="desbloquear('${l.chave}')">OK</button>
+                <button class="btn-yellow" onclick="resetar('${l.chave}')">Reset</button>
+                <button class="btn-blue" onclick="renovar('${l.chave}')">+30d</button>
+                <button class="btn-red" onclick="deletar('${l.chave}')">Del</button>
+                <button class="btn-copy" onclick="copiar('${l.chave}')">📋</button>
+            </td>
+        </tr>`;
+    });
 
-            let dias = Math.ceil(((l.expira_em || 0) - Date.now()) / 86400000);
-            if(isNaN(dias) || dias < 0) dias = 0;
-
-            html += `
-            <tr>
-                <td>${l.cliente_nome || "-"}</td>
-                <td>${status}</td>
-                <td>${l.chave || "-"}</td>
-                <td>${dias}</td>
-                <td>
-                    <button class="btn-red" onclick="bloquear('${l.chave}')">Bloq</button>
-                    <button class="btn-green" onclick="desbloquear('${l.chave}')">OK</button>
-                    <button class="btn-yellow" onclick="resetar('${l.chave}')">Reset</button>
-                    <button class="btn-blue" onclick="renovar('${l.chave}')">+30d</button>
-                    <button class="btn-red" onclick="deletar('${l.chave}')">Del</button>
-                    <button class="btn-copy" onclick="copiar('${l.chave}')">📋</button>
-                </td>
-            </tr>`;
-        });
-
-        document.getElementById("tabela").innerHTML = html;
-
-        document.getElementById("cards").innerHTML = `
-            <div class="card">Ativos<br>${ativos}</div>
-            <div class="card">Expirados<br>${expirados}</div>
-            <div class="card">Bloqueados<br>${bloqueados}</div>
-        `;
-    }catch(err){
-        console.log(err);
-        alert("Erro ao carregar painel");
-    }
-}
-
-async function carregarEventos(){
-    try{
-        const res = await fetch(API + "/evento");
-        const dados = await res.json();
-
-        let html = "<tr><th>Tipo</th><th>Email</th><th>Device</th><th>Data</th></tr>";
-
-        dados.reverse().forEach(e=>{
-            html += `
-            <tr>
-                <td>${e.tipo || "-"}</td>
-                <td>${e.email || "-"}</td>
-                <td>${e.device_id || "-"}</td>
-                <td>${e.data ? new Date(e.data).toLocaleString() : "-"}</td>
-            </tr>`;
-        });
-
-        document.getElementById("tabelaEventos").innerHTML = html;
-
-    }catch(err){
-        console.log(err);
-    }
-}
-
-async function carregarUsuarios(){
-    try{
-        const res = await fetch(API + "/usuarios");
-        const dados = await res.json();
-
-        let html = "<tr><th>Nome</th><th>Email</th><th>Criado</th><th>Ações</th></tr>";
-
-        dados.forEach(u=>{
-            html += `
-            <tr>
-                <td>${u.nome || "-"}</td>
-                <td>${u.email || "-"}</td>
-                <td>${u.criado_em ? new Date(u.criado_em * 1000).toLocaleString() : "-"}</td>
-                <td>
-                    <button class="btn-yellow" onclick="resetarSenha(${u.id})">Senha</button>
-                    <button class="btn-red" onclick="deletarUsuario(${u.id})">Del</button>
-                </td>
-            </tr>`;
-        });
-
-        document.getElementById("tabelaUsuarios").innerHTML = html;
-
-    }catch(err){
-        console.log(err);
-        alert("Erro ao carregar usuários");
-    }
+    document.getElementById("tabela").innerHTML = html;
 }
 
 async function gerar(){
@@ -315,31 +248,6 @@ async function deletar(c){
     carregar();
 }
 
-async function deletarUsuario(id){
-    if(!confirm("Excluir usuário?")) return;
-
-    await fetch(API + "/deletar-usuario", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id })
-    });
-
-    carregarUsuarios();
-}
-
-async function resetarSenha(id){
-    const nova = prompt("Nova senha:");
-    if(!nova) return;
-
-    await fetch(API + "/resetar-senha", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id, novaSenha: nova })
-    });
-
-    alert("Senha atualizada!");
-}
-
 function copiar(c){
     navigator.clipboard.writeText(c);
     alert("Copiado!");
@@ -348,10 +256,6 @@ function copiar(c){
 setInterval(()=>{
     if(localStorage.getItem("auth") === "ok"){
         carregar();
-
-        if(document.getElementById("eventos").style.display === "block"){
-            carregarEventos();
-        }
     }
 }, 3000);
 
