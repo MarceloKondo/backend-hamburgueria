@@ -1,5 +1,5 @@
 // =============================
-// SERVER.JS COMPLETO (OK)
+// SERVER.JS COMPLETO (CORRIGIDO)
 // =============================
 
 const express = require("express");
@@ -55,7 +55,6 @@ async function startServer() {
         );
     `);
 
-    // 🔥 NOVO: EVENTOS
     await pool.query(`
         CREATE TABLE IF NOT EXISTS eventos (
             id SERIAL PRIMARY KEY,
@@ -75,7 +74,6 @@ async function startServer() {
 }
 
 startServer();
-
 
 // =============================
 // 🔹 LOGIN
@@ -118,7 +116,6 @@ app.post("/auth/login", async (req, res) => {
     }
 });
 
-
 // =============================
 // 🔹 PAINEL
 // =============================
@@ -127,24 +124,25 @@ app.get("/api/v1/licenca/painel", async (req, res) => {
     res.json(rows);
 });
 
-
 // =============================
-// 🔹 GERAR
+// 🔹 GERAR (CORRIGIDO)
 // =============================
 app.post("/api/v1/licenca/gerar", async (req, res) => {
     const { cliente, dias } = req.body;
 
+    const diasNum = Number(dias);
+    const diasFinal = (!diasNum || isNaN(diasNum) || diasNum <= 0) ? 30 : diasNum;
+
     const chave = require("crypto").randomBytes(16).toString("hex");
-    const expira_em = Date.now() + dias * 86400000;
+    const expira_em = Date.now() + (diasFinal * 86400000);
 
     await pool.query(
         "INSERT INTO licencas (cliente_nome, chave, statusFinal, expira_em) VALUES ($1,$2,$3,$4)",
         [cliente, chave, "ATIVO", expira_em]
     );
 
-    res.json({ ok: true, chave });
+    res.json({ ok: true, chave, dias: diasFinal });
 });
-
 
 // =============================
 // 🔹 BLOQUEAR / DESBLOQUEAR
@@ -160,7 +158,6 @@ app.post("/api/v1/licenca/desbloquear", async (req, res) => {
     await pool.query("UPDATE licencas SET statusFinal='ATIVO' WHERE chave=$1", [chave]);
     res.json({ ok: true });
 });
-
 
 // =============================
 // 🔹 ATIVAR
@@ -183,7 +180,6 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
     res.json({ sucesso: true });
 });
 
-
 // =============================
 // 🔥 VALIDAR (CORRIGIDO)
 // =============================
@@ -197,22 +193,26 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
         );
 
         const lic = rows[0];
-
         if (!lic) return res.json({ valida: false });
-
-        if (lic.statusFinal !== "ATIVO") return res.json({ valida: false });
 
         const agora = Date.now();
 
+        // 🔥 sempre atualiza ultimo uso
+        await pool.query(
+            "UPDATE licencas SET ultimo_uso=$1 WHERE chave=$2",
+            [agora, chave]
+        );
+
+        if (lic.statusFinal !== "ATIVO") {
+            return res.json({ valida: false, status: lic.statusFinal });
+        }
+
         if (agora > lic.expira_em) {
-      await pool.query(
-        "UPDATE licencas SET ultimo_uso=$1 WHERE chave=$2",
-        [Date.now(), chave]
-          );
             return res.json({
                 valida: false,
                 status: "EXPIRADO",
-                diasRestantes: 0
+                diasRestantes: 0,
+                ultimoUso: agora
             });
         }
 
@@ -223,16 +223,15 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
         const diasRestantes = Math.ceil((lic.expira_em - agora) / 86400000);
 
         let statusDetalhado = "ATIVA";
-
         if (diasRestantes <= 3) statusDetalhado = "VENCENDO";
-        if (diasRestantes <= 0) statusDetalhado = "EXPIRADA";
 
         res.json({
             valida: true,
             status: lic.statusFinal,
             dataValidade: lic.expira_em,
             diasRestantes,
-            statusDetalhado
+            statusDetalhado,
+            ultimoUso: agora
         });
 
     } catch (err) {
@@ -240,7 +239,6 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
         res.status(500).json({ valida: false });
     }
 });
-
 
 // =============================
 // 🔹 EVENTOS (APP ENVIA)
@@ -267,7 +265,6 @@ app.post("/api/v1/licenca/evento", async (req, res) => {
     }
 });
 
-
 // =============================
 // 🔹 EVENTOS (PAINEL)
 // =============================
@@ -284,7 +281,6 @@ app.get("/api/v1/licenca/evento", async (req, res) => {
         res.status(500).json({ erro: "Erro ao buscar eventos" });
     }
 });
-
 
 // =============================
 // 🔹 DELETAR
@@ -306,7 +302,6 @@ app.post("/api/v1/licenca/deletar", async (req, res) => {
     }
 });
 
-
 // =============================
 // 🔹 RESETAR DISPOSITIVO
 // =============================
@@ -327,13 +322,15 @@ app.post("/api/v1/licenca/resetar-dispositivos", async (req, res) => {
     }
 });
 
-
 // =============================
 // 🔹 RENOVAR
 // =============================
 app.post("/api/v1/licenca/renovar", async (req, res) => {
     try {
         const { chave, dias } = req.body;
+
+        const diasNum = Number(dias);
+        const diasFinal = (!diasNum || isNaN(diasNum) || diasNum <= 0) ? 30 : diasNum;
 
         const { rows } = await pool.query(
             "SELECT expira_em FROM licencas WHERE chave=$1",
@@ -345,7 +342,7 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
         }
 
         const atual = rows[0].expira_em;
-        const novaData = Math.max(atual, Date.now()) + (dias * 86400000);
+        const novaData = Math.max(atual, Date.now()) + (diasFinal * 86400000);
 
         await pool.query(
             "UPDATE licencas SET expira_em=$1 WHERE chave=$2",
@@ -359,7 +356,6 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
         res.status(500).json({ erro: "Erro ao renovar" });
     }
 });
-
 
 // =============================
 // 🔹 CRIAR USUÁRIO
@@ -392,11 +388,10 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
         res.status(500).json({ erro: "Erro ao criar usuário" });
     }
 });
+
 // =============================
 // 🔹 USUÁRIOS (PAINEL)
 // =============================
-
-// LISTAR USUÁRIOS
 app.get("/api/v1/licenca/usuarios", async (req, res) => {
     try {
         const { rows } = await pool.query(
@@ -411,8 +406,6 @@ app.get("/api/v1/licenca/usuarios", async (req, res) => {
     }
 });
 
-
-// DELETAR USUÁRIO
 app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
     try {
         const { id } = req.body;
@@ -430,8 +423,6 @@ app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
     }
 });
 
-
-// RESETAR SENHA
 app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
     try {
         const { id, novaSenha } = req.body;
