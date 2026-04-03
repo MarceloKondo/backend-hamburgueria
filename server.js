@@ -186,60 +186,107 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
 // =============================
 // 🔥 VALIDAR (CORRIGIDO)
 // =============================
+// =============================
+// 🔹 VALIDAR LICENÇA (COMPLETO)
+// =============================
 app.post("/api/v1/licenca/validar", async (req, res) => {
     try {
         const { chave, deviceId } = req.body;
 
+        if (!chave) {
+            return res.status(400).json({
+                valida: false,
+                erro: "Chave obrigatória"
+            });
+        }
+
+        // 🔍 busca licença
         const { rows } = await pool.query(
-            "SELECT * FROM licencas WHERE chave=$1",
+            "SELECT * FROM licencas WHERE chave = $1",
             [chave]
         );
 
         const lic = rows[0];
-        if (!lic) return res.json({ valida: false });
 
-        const agora = Date.now();
-
-        // 🔥 sempre atualiza ultimo uso
-        await pool.query(
-            "UPDATE licencas SET ultimo_uso=$1 WHERE chave=$2",
-            [agora, chave]
-        );
-
-        if (lic.statusFinal !== "ATIVO") {
-            return res.json({ valida: false, status: lic.statusFinal });
+        if (!lic) {
+            return res.json({
+                valida: false,
+                status: "NAO_ENCONTRADA"
+            });
         }
 
-        if (agora > lic.expira_em) {
+        // 🔥 NORMALIZA DATA (resolve problema de tipo)
+        const agora = Date.now();
+        const expiraEm = new Date(lic.expira_em).getTime();
+
+        // 🔥 ATUALIZA ULTIMO USO
+        await pool.query(
+            "UPDATE licencas SET ultimo_uso = NOW() WHERE id = $1",
+            [lic.id]
+        );
+
+        // 🔒 BLOQUEIO POR DEVICE (se já estiver vinculado)
+        if (lic.dispositivo_id && deviceId && lic.dispositivo_id !== deviceId) {
+            return res.json({
+                valida: false,
+                status: "DISPOSITIVO_INVALIDO"
+            });
+        }
+
+        // 🔥 SE NÃO TEM DEVICE, VINCULA AUTOMATICAMENTE
+        if (!lic.dispositivo_id && deviceId) {
+            await pool.query(
+                "UPDATE licencas SET dispositivo_id = $1 WHERE id = $2",
+                [deviceId, lic.id]
+            );
+        }
+
+        // ⛔ STATUS BLOQUEADO (MAS IGNORA NULL)
+        if (lic.statusfinal && lic.statusfinal !== "ATIVO") {
+            return res.json({
+                valida: false,
+                status: lic.statusfinal
+            });
+        }
+
+        // ⛔ EXPIRADO
+        if (agora > expiraEm) {
             return res.json({
                 valida: false,
                 status: "EXPIRADO",
                 diasRestantes: 0,
-                ultimoUso: agora
+                expiraEm
             });
         }
 
-        if (lic.dispositivo_id && lic.dispositivo_id !== deviceId) {
-            return res.json({ valida: false });
+        // ✅ CÁLCULO CORRETO DE DIAS
+        const diasRestantes = Math.max(
+            0,
+            Math.ceil((expiraEm - agora) / (1000 * 60 * 60 * 24))
+        );
+
+        // 🔔 STATUS DETALHADO
+        let statusDetalhado = "ATIVO";
+        if (diasRestantes <= 3) {
+            statusDetalhado = "VENCENDO";
         }
 
-        const diasRestantes = Math.ceil((lic.expira_em - agora) / 86400000);
-
-        let statusDetalhado = "ATIVA";
-        if (diasRestantes <= 3) statusDetalhado = "VENCENDO";
-
-        res.json({
+        // ✅ RESPOSTA FINAL
+        return res.json({
             valida: true,
-            status: lic.statusFinal,
-            dataValidade: lic.expira_em,
-            diasRestantes,
+            status: "ATIVO",
             statusDetalhado,
-            ultimoUso: agora
+            diasRestantes,
+            expiraEm,
+            servidorAgora: agora
         });
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ valida: false });
+        console.error("ERRO VALIDAR:", err);
+        return res.status(500).json({
+            valida: false,
+            erro: "Erro interno no servidor"
+        });
     }
 });
 
