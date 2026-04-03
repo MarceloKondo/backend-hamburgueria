@@ -27,50 +27,56 @@ const pool = new Pool({
 // 🔹 INIT DB
 // =============================
 async function startServer() {
+    try {
 
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id SERIAL PRIMARY KEY,
-            nome TEXT,
-            email TEXT UNIQUE,
-            senha TEXT,
-            criado_em BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
-        );
-    `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                nome TEXT,
+                email TEXT UNIQUE,
+                senha TEXT,
+                criado_em BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
+            );
+        `);
 
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS licencas (
-            id SERIAL PRIMARY KEY,
-            cliente_nome TEXT,
-            chave TEXT UNIQUE,
-            statusFinal TEXT,
-            expira_em BIGINT,
-            dispositivos INTEGER DEFAULT 0,
-            dispositivo_id TEXT,
-            usuario_login TEXT,
-            usuario_senha TEXT,
-            ultimo_uso BIGINT,
-            data_ativacao BIGINT,
-            tentativas_invalidas INTEGER DEFAULT 0
-        );
-    `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS licencas (
+                id SERIAL PRIMARY KEY,
+                cliente_nome TEXT,
+                chave TEXT UNIQUE,
+                statusFinal TEXT,
+                expira_em BIGINT,
+                dispositivos INTEGER DEFAULT 0,
+                dispositivo_id TEXT,
+                usuario_login TEXT,
+                usuario_senha TEXT,
+                ultimo_uso BIGINT,
+                data_ativacao BIGINT,
+                tentativas_invalidas INTEGER DEFAULT 0
+            );
+        `);
 
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS eventos (
-            id SERIAL PRIMARY KEY,
-            tipo TEXT,
-            email TEXT,
-            device_id TEXT,
-            data BIGINT
-        );
-    `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS eventos (
+                id SERIAL PRIMARY KEY,
+                tipo TEXT,
+                email TEXT,
+                device_id TEXT,
+                data BIGINT
+            );
+        `);
 
-    console.log("Postgres conectado");
+        console.log("Postgres conectado");
 
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-        console.log("Servidor rodando na porta " + PORT);
-    });
+        const PORT = process.env.PORT || 3000;
+        app.listen(PORT, () => {
+            console.log("Servidor rodando na porta " + PORT);
+        });
+
+    } catch (err) {
+        console.error("ERRO AO INICIAR SERVIDOR:", err);
+        process.exit(1);
+    }
 }
 
 startServer();
@@ -125,7 +131,7 @@ app.get("/api/v1/licenca/painel", async (req, res) => {
 });
 
 // =============================
-// 🔹 GERAR (CORRIGIDO)
+// 🔹 GERAR
 // =============================
 app.post("/api/v1/licenca/gerar", async (req, res) => {
     console.log("REQ BODY:", req.body);
@@ -139,7 +145,6 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
 
     const chave = require("crypto").randomBytes(16).toString("hex");
 
-    // 🔥 GARANTE TIMESTAMP EM MILIS
     const agora = Date.now();
     const expira_em = agora + (diasFinal * 86400000);
 
@@ -176,7 +181,7 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
     const lic = rows[0];
 
     if (!lic) return res.status(404).json({ erro: "Licença não encontrada" });
-    if (lic.statusfinal === "BLOQUEADO" || lic.statusFinal === "BLOQUEADO") return res.status(403).json({ erro: "Bloqueado" });
+    if (lic.statusFinal === "BLOQUEADO") return res.status(403).json({ erro: "Bloqueado" });
 
     const expira = Number(lic.expira_em);
     if (!expira || isNaN(expira)) {
@@ -194,7 +199,7 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
 });
 
 // =============================
-// 🔹 VALIDAR (100% CORRIGIDO)
+// 🔹 VALIDAR
 // =============================
 app.post("/api/v1/licenca/validar", async (req, res) => {
     try {
@@ -216,8 +221,6 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
         }
 
         const agora = Date.now();
-
-        // 🔥 VALIDA expira_em COMO NUMBER
         const expiraEm = Number(lic.expira_em);
 
         if (!expiraEm || isNaN(expiraEm)) {
@@ -228,18 +231,15 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
             });
         }
 
-        // 🔥 ATUALIZA ULTIMO USO CORRETO (MILLIS)
         await pool.query(
             "UPDATE licencas SET ultimo_uso = $1 WHERE chave = $2",
             [agora, chave]
         );
 
-        // 🔒 DEVICE CHECK
         if (lic.dispositivo_id && deviceId && lic.dispositivo_id !== deviceId) {
             return res.json({ valida: false, status: "DEVICE_INVALIDO" });
         }
 
-        // 🔒 PRIMEIRA ATIVAÇÃO VINCULA DEVICE
         if (!lic.dispositivo_id && deviceId) {
             await pool.query(
                 "UPDATE licencas SET dispositivo_id = $1 WHERE chave = $2",
@@ -247,7 +247,7 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
             );
         }
 
-        const status = lic.statusFinal || lic.statusfinal;
+        const status = lic.statusFinal;
 
         if (status && status !== "ATIVO") {
             return res.json({ valida: false, status });
@@ -262,7 +262,6 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
             });
         }
 
-        // 🔥 CÁLCULO CORRETO (SEM +1 DIA)
         const diff = expiraEm - agora;
         const diasRestantes = Math.max(0, Math.floor(diff / 86400000));
 
@@ -282,7 +281,7 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
 });
 
 // =============================
-// 🔹 EVENTOS (APP ENVIA)
+// 🔹 EVENTOS
 // =============================
 app.post("/api/v1/licenca/evento", async (req, res) => {
     try {
@@ -306,9 +305,6 @@ app.post("/api/v1/licenca/evento", async (req, res) => {
     }
 });
 
-// =============================
-// 🔹 EVENTOS (PAINEL)
-// =============================
 app.get("/api/v1/licenca/evento", async (req, res) => {
     try {
         const { rows } = await pool.query(
@@ -433,7 +429,7 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 });
 
 // =============================
-// 🔹 USUÁRIOS (PAINEL)
+// 🔹 USUÁRIOS
 // =============================
 app.get("/api/v1/licenca/usuarios", async (req, res) => {
     try {
@@ -466,7 +462,10 @@ app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
     }
 });
 
-app.app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
+// =============================
+// 🔹 RESETAR SENHA (CORRIGIDO)
+// =============================
+app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
     try {
         const { id, novaSenha } = req.body;
 
@@ -484,4 +483,3 @@ app.app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
         res.status(500).json({ erro: "Erro ao resetar senha" });
     }
 });
-            
