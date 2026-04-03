@@ -183,24 +183,14 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
     res.json({ sucesso: true });
 });
 
-// =============================
-// 🔥 VALIDAR (CORRIGIDO)
-// =============================
-// =============================
-// 🔹 VALIDAR LICENÇA (COMPLETO)
-// =============================
 app.post("/api/v1/licenca/validar", async (req, res) => {
     try {
         const { chave, deviceId } = req.body;
 
         if (!chave) {
-            return res.status(400).json({
-                valida: false,
-                erro: "Chave obrigatória"
-            });
+            return res.status(400).json({ valida: false });
         }
 
-        // 🔍 busca licença
         const { rows } = await pool.query(
             "SELECT * FROM licencas WHERE chave = $1",
             [chave]
@@ -209,44 +199,42 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
         const lic = rows[0];
 
         if (!lic) {
-            return res.json({
-                valida: false,
-                status: "NAO_ENCONTRADA"
-            });
+            return res.json({ valida: false, status: "NAO_ENCONTRADA" });
         }
 
-        // 🔥 NORMALIZA DATA (resolve problema de tipo)
         const agora = Date.now();
-        const expiraEm = new Date(lic.expira_em).getTime();
 
-        // 🔥 ATUALIZA ULTIMO USO
+        // 🔥 DATA SEGURA
+        let expiraEm;
+        try {
+            expiraEm = new Date(lic.expira_em).getTime();
+            if (isNaN(expiraEm)) throw new Error();
+        } catch {
+            console.error("DATA INVALIDA:", lic.expira_em);
+            return res.status(500).json({ valida: false, erro: "data_invalida" });
+        }
+
+        // 🔥 UPDATE SEGURO
         await pool.query(
-            "UPDATE licencas SET ultimo_uso = NOW() WHERE id = $1",
-            [lic.id]
+            "UPDATE licencas SET ultimo_uso = NOW() WHERE chave = $1",
+            [chave]
         );
 
-        // 🔒 BLOQUEIO POR DEVICE (se já estiver vinculado)
+        // 🔒 DEVICE
         if (lic.dispositivo_id && deviceId && lic.dispositivo_id !== deviceId) {
-            return res.json({
-                valida: false,
-                status: "DISPOSITIVO_INVALIDO"
-            });
+            return res.json({ valida: false, status: "DEVICE_INVALIDO" });
         }
 
-        // 🔥 SE NÃO TEM DEVICE, VINCULA AUTOMATICAMENTE
         if (!lic.dispositivo_id && deviceId) {
             await pool.query(
-                "UPDATE licencas SET dispositivo_id = $1 WHERE id = $2",
-                [deviceId, lic.id]
+                "UPDATE licencas SET dispositivo_id = $1 WHERE chave = $2",
+                [deviceId, chave]
             );
         }
 
-        // ⛔ STATUS BLOQUEADO (MAS IGNORA NULL)
+        // ⛔ STATUS (ignora null)
         if (lic.statusfinal && lic.statusfinal !== "ATIVO") {
-            return res.json({
-                valida: false,
-                status: lic.statusfinal
-            });
+            return res.json({ valida: false, status: lic.statusfinal });
         }
 
         // ⛔ EXPIRADO
@@ -254,42 +242,26 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
             return res.json({
                 valida: false,
                 status: "EXPIRADO",
-                diasRestantes: 0,
-                expiraEm
+                diasRestantes: 0
             });
         }
 
-        // ✅ CÁLCULO CORRETO DE DIAS
-        const diasRestantes = Math.max(
-            0,
-            Math.ceil((expiraEm - agora) / (1000 * 60 * 60 * 24))
-        );
+        const diasRestantes = Math.ceil((expiraEm - agora) / 86400000);
 
-        // 🔔 STATUS DETALHADO
-        let statusDetalhado = "ATIVO";
-        if (diasRestantes <= 3) {
-            statusDetalhado = "VENCENDO";
-        }
-
-        // ✅ RESPOSTA FINAL
-        return res.json({
+        res.json({
             valida: true,
-            status: "ATIVO",
-            statusDetalhado,
             diasRestantes,
-            expiraEm,
-            servidorAgora: agora
+            expiraEm
         });
 
     } catch (err) {
-        console.error("ERRO VALIDAR:", err);
-        return res.status(500).json({
+        console.error("ERRO REAL:", err);
+        res.status(500).json({
             valida: false,
-            erro: "Erro interno no servidor"
+            erro: err.message
         });
     }
 });
-
 // =============================
 // 🔹 EVENTOS (APP ENVIA)
 // =============================
