@@ -128,10 +128,14 @@ app.get("/api/v1/licenca/painel", async (req, res) => {
 // 🔹 GERAR (CORRIGIDO)
 // =============================
 app.post("/api/v1/licenca/gerar", async (req, res) => {
+    console.log("REQ BODY:", req.body);
+
     const { cliente, dias } = req.body;
 
     const diasNum = Number(dias);
     const diasFinal = (!diasNum || isNaN(diasNum) || diasNum <= 0) ? 30 : diasNum;
+
+    console.log("DIAS RECEBIDO:", dias, "-> convertido:", diasFinal);
 
     const chave = require("crypto").randomBytes(16).toString("hex");
     const expira_em = Date.now() + (diasFinal * 86400000);
@@ -143,7 +147,6 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
 
     res.json({ ok: true, chave, dias: diasFinal });
 });
-
 // =============================
 // 🔹 BLOQUEAR / DESBLOQUEAR
 // =============================
