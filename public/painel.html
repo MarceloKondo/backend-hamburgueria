@@ -91,8 +91,8 @@ th, td {
     <div>
         <button onclick="trocarTab('licencas')" class="btn-blue">Licenças</button>
         <button onclick="trocarTab('eventos')" class="btn-yellow">Eventos</button>
-        <button onclick="logout()" class="btn-red">Sair</button>
         <button onclick="trocarTab('usuarios')" class="btn-green">Usuários</button>
+        <button onclick="logout()" class="btn-red">Sair</button>
     </div>
 </div>
 
@@ -101,7 +101,7 @@ th, td {
 <div id="licencasBox">
     <h3>➕ Gerar Licença</h3>
     <input id="cliente" placeholder="Cliente">
-    <input id="dias" placeholder="Dias">
+    <input id="dias" type="number" placeholder="Dias">
     <button class="btn-blue" onclick="gerar()">Gerar</button>
 
     <table id="tabela"></table>
@@ -112,10 +112,10 @@ th, td {
     <table id="tabelaEventos"></table>
 </div>
     
-    <div id="usuarios" class="hidden">
+<div id="usuarios" class="hidden">
     <h3>👤 Usuários</h3>
     <table id="tabelaUsuarios"></table>
-    </div>
+</div>
 
 </div>
 
@@ -178,18 +178,20 @@ async function carregar(){
 
         dados.forEach(l=>{
 
-            if(l.statusFinal==="ATIVO") ativos++;
-            if(l.statusFinal==="EXPIRADO") expirados++;
-            if(l.statusFinal==="BLOQUEADO") bloqueados++;
+            const status = l.statusFinal || l.status || "DESCONHECIDO";
 
-            let dias = Math.ceil((l.expira_em - Date.now()) / 86400000);
+            if(status==="ATIVO") ativos++;
+            if(status==="EXPIRADO") expirados++;
+            if(status==="BLOQUEADO") bloqueados++;
+
+            let dias = Math.ceil(((l.expira_em || 0) - Date.now()) / 86400000);
             if(isNaN(dias) || dias < 0) dias = 0;
 
             html += `
             <tr>
                 <td>${l.cliente_nome || "-"}</td>
-                <td>${l.statusFinal}</td>
-                <td>${l.chave}</td>
+                <td>${status}</td>
+                <td>${l.chave || "-"}</td>
                 <td>${dias}</td>
                 <td>
                     <button class="btn-red" onclick="bloquear('${l.chave}')">Bloq</button>
@@ -197,7 +199,7 @@ async function carregar(){
                     <button class="btn-yellow" onclick="resetar('${l.chave}')">Reset</button>
                     <button class="btn-blue" onclick="renovar('${l.chave}')">+30d</button>
                     <button class="btn-red" onclick="deletar('${l.chave}')">Del</button>
-                    <button class="btn-blue" onclick="copiar('${l.chave}')">📋</button>
+                    <button class="btn-copy" onclick="copiar('${l.chave}')">📋</button>
                 </td>
             </tr>`;
         });
@@ -225,10 +227,10 @@ async function carregarEventos(){
         dados.reverse().forEach(e=>{
             html += `
             <tr>
-                <td>${e.tipo}</td>
+                <td>${e.tipo || "-"}</td>
                 <td>${e.email || "-"}</td>
                 <td>${e.device_id || "-"}</td>
-                <td>${new Date(e.data).toLocaleString()}</td>
+                <td>${e.data ? new Date(e.data).toLocaleString() : "-"}</td>
             </tr>`;
         });
 
@@ -237,26 +239,6 @@ async function carregarEventos(){
     }catch(err){
         console.log(err);
     }
-}
-
-async function gerar(){
-    const diasInput = parseInt(document.getElementById("dias").value);
-
-    await fetch(API+"/gerar",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-            cliente:document.getElementById("cliente").value,
-            dias: isNaN(diasInput) ? 30 : diasInput
-        })
-    });
-
-    carregar();
-}
-
-async function bloquear(c){
-    await fetch(API+"/bloquear",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
-    carregar();
 }
 
 async function carregarUsuarios(){
@@ -269,9 +251,9 @@ async function carregarUsuarios(){
         dados.forEach(u=>{
             html += `
             <tr>
-                <td>${u.nome}</td>
-                <td>${u.email}</td>
-                <td>${new Date(u.criado_em * 1000).toLocaleString()}</td>
+                <td>${u.nome || "-"}</td>
+                <td>${u.email || "-"}</td>
+                <td>${u.criado_em ? new Date(u.criado_em * 1000).toLocaleString() : "-"}</td>
                 <td>
                     <button class="btn-yellow" onclick="resetarSenha(${u.id})">Senha</button>
                     <button class="btn-red" onclick="deletarUsuario(${u.id})">Del</button>
@@ -287,7 +269,53 @@ async function carregarUsuarios(){
     }
 }
 
-    async function deletarUsuario(id){
+async function gerar(){
+    const diasRaw = document.getElementById("dias").value.trim();
+    const diasNum = Number(diasRaw);
+
+    const diasFinal = (!diasRaw || isNaN(diasNum) || diasNum <= 0)
+        ? 30
+        : diasNum;
+
+    await fetch(API+"/gerar",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+            cliente:document.getElementById("cliente").value,
+            dias: diasFinal
+        })
+    });
+
+    carregar();
+}
+
+async function bloquear(c){
+    await fetch(API+"/bloquear",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
+    carregar();
+}
+
+async function desbloquear(c){
+    await fetch(API+"/desbloquear",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
+    carregar();
+}
+
+async function resetar(c){
+    await fetch(API+"/resetar-dispositivos",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
+    carregar();
+}
+
+async function renovar(c){
+    await fetch(API+"/renovar",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c,dias:30}) });
+    carregar();
+}
+
+async function deletar(c){
+    if(!confirm("Excluir licença?")) return;
+    await fetch(API+"/deletar",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
+    carregar();
+}
+
+async function deletarUsuario(id){
     if(!confirm("Excluir usuário?")) return;
 
     await fetch(API + "/deletar-usuario", {
@@ -311,27 +339,6 @@ async function resetarSenha(id){
 
     alert("Senha atualizada!");
 }
-    
-async function desbloquear(c){
-    await fetch(API+"/desbloquear",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
-    carregar();
-}
-
-async function resetar(c){
-    await fetch(API+"/resetar-dispositivos",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
-    carregar();
-}
-
-async function renovar(c){
-    await fetch(API+"/renovar",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c,dias:30}) });
-    carregar();
-}
-
-async function deletar(c){
-    if(!confirm("Excluir licença?")) return;
-    await fetch(API+"/deletar",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave:c}) });
-    carregar();
-}
 
 function copiar(c){
     navigator.clipboard.writeText(c);
@@ -341,6 +348,7 @@ function copiar(c){
 setInterval(()=>{
     if(localStorage.getItem("auth") === "ok"){
         carregar();
+
         if(document.getElementById("eventos").style.display === "block"){
             carregarEventos();
         }
