@@ -138,7 +138,10 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
     console.log("DIAS RECEBIDO:", dias, "-> convertido:", diasFinal);
 
     const chave = require("crypto").randomBytes(16).toString("hex");
-    const expira_em = Date.now() + (diasFinal * 86400000);
+
+    // 🔥 GARANTE TIMESTAMP EM MILIS
+    const agora = Date.now();
+    const expira_em = agora + (diasFinal * 86400000);
 
     await pool.query(
         "INSERT INTO licencas (cliente_nome, chave, statusFinal, expira_em) VALUES ($1,$2,$3,$4)",
@@ -147,6 +150,7 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
 
     res.json({ ok: true, chave, dias: diasFinal });
 });
+
 // =============================
 // 🔹 BLOQUEAR / DESBLOQUEAR
 // =============================
@@ -172,8 +176,14 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
     const lic = rows[0];
 
     if (!lic) return res.status(404).json({ erro: "Licença não encontrada" });
-    if (lic.statusFinal === "BLOQUEADO") return res.status(403).json({ erro: "Bloqueado" });
-    if (Date.now() > lic.expira_em) return res.status(403).json({ erro: "Expirada" });
+    if (lic.statusfinal === "BLOQUEADO" || lic.statusFinal === "BLOQUEADO") return res.status(403).json({ erro: "Bloqueado" });
+
+    const expira = Number(lic.expira_em);
+    if (!expira || isNaN(expira)) {
+        return res.status(500).json({ erro: "data_invalida" });
+    }
+
+    if (Date.now() > expira) return res.status(403).json({ erro: "Expirada" });
 
     await pool.query(
         "UPDATE licencas SET dispositivo_id=$1, data_ativacao=$2, ultimo_uso=$3 WHERE chave=$4",
@@ -183,6 +193,9 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
     res.json({ sucesso: true });
 });
 
+// =============================
+// 🔹 VALIDAR (100% CORRIGIDO)
+// =============================
 app.post("/api/v1/licenca/validar", async (req, res) => {
     try {
         const { chave, deviceId } = req.body;
@@ -204,27 +217,29 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
 
         const agora = Date.now();
 
-        // 🔥 DATA SEGURA
-        let expiraEm;
-        try {
-            expiraEm = new Date(lic.expira_em).getTime();
-            if (isNaN(expiraEm)) throw new Error();
-        } catch {
-            console.error("DATA INVALIDA:", lic.expira_em);
-            return res.status(500).json({ valida: false, erro: "data_invalida" });
+        // 🔥 VALIDA expira_em COMO NUMBER
+        const expiraEm = Number(lic.expira_em);
+
+        if (!expiraEm || isNaN(expiraEm)) {
+            console.error("DATA INVALIDA NO BANCO:", lic.expira_em);
+            return res.status(500).json({
+                valida: false,
+                erro: "data_invalida"
+            });
         }
 
-        // 🔥 UPDATE SEGURO
+        // 🔥 ATUALIZA ULTIMO USO CORRETO (MILLIS)
         await pool.query(
-            "UPDATE licencas SET ultimo_uso = NOW() WHERE chave = $1",
-            [chave]
+            "UPDATE licencas SET ultimo_uso = $1 WHERE chave = $2",
+            [agora, chave]
         );
 
-        // 🔒 DEVICE
+        // 🔒 DEVICE CHECK
         if (lic.dispositivo_id && deviceId && lic.dispositivo_id !== deviceId) {
             return res.json({ valida: false, status: "DEVICE_INVALIDO" });
         }
 
+        // 🔒 PRIMEIRA ATIVAÇÃO VINCULA DEVICE
         if (!lic.dispositivo_id && deviceId) {
             await pool.query(
                 "UPDATE licencas SET dispositivo_id = $1 WHERE chave = $2",
@@ -232,21 +247,24 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
             );
         }
 
-        // ⛔ STATUS (ignora null)
-        if (lic.statusfinal && lic.statusfinal !== "ATIVO") {
-            return res.json({ valida: false, status: lic.statusfinal });
+        const status = lic.statusFinal || lic.statusfinal;
+
+        if (status && status !== "ATIVO") {
+            return res.json({ valida: false, status });
         }
 
-        // ⛔ EXPIRADO
         if (agora > expiraEm) {
             return res.json({
                 valida: false,
                 status: "EXPIRADO",
-                diasRestantes: 0
+                diasRestantes: 0,
+                expiraEm
             });
         }
 
-        const diasRestantes = Math.ceil((expiraEm - agora) / 86400000);
+        // 🔥 CÁLCULO CORRETO (SEM +1 DIA)
+        const diff = expiraEm - agora;
+        const diasRestantes = Math.max(0, Math.floor(diff / 86400000));
 
         res.json({
             valida: true,
@@ -255,13 +273,14 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
         });
 
     } catch (err) {
-        console.error("ERRO REAL:", err);
+        console.error("ERRO VALIDAR:", err);
         res.status(500).json({
             valida: false,
-            erro: err.message
+            erro: "erro_interno"
         });
     }
 });
+
 // =============================
 // 🔹 EVENTOS (APP ENVIA)
 // =============================
@@ -363,8 +382,10 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
             return res.status(404).json({ erro: "Licença não encontrada" });
         }
 
-        const atual = rows[0].expira_em;
-        const novaData = Math.max(atual, Date.now()) + (diasFinal * 86400000);
+        const atual = Number(rows[0].expira_em);
+        const base = (!atual || isNaN(atual)) ? Date.now() : Math.max(atual, Date.now());
+
+        const novaData = base + (diasFinal * 86400000);
 
         await pool.query(
             "UPDATE licencas SET expira_em=$1 WHERE chave=$2",
@@ -445,7 +466,7 @@ app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
     }
 });
 
-app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
+app.app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
     try {
         const { id, novaSenha } = req.body;
 
@@ -463,3 +484,4 @@ app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
         res.status(500).json({ erro: "Erro ao resetar senha" });
     }
 });
+            
