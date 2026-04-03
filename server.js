@@ -202,16 +202,37 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
 
         if (lic.statusFinal !== "ATIVO") return res.json({ valida: false });
 
-        if (Date.now() > lic.expira_em) return res.json({ valida: false });
+        const agora = Date.now();
+
+        if (agora > lic.expira_em) {
+      await pool.query(
+        "UPDATE licencas SET ultimo_uso=$1 WHERE chave=$2",
+        [Date.now(), chave]
+          );
+            return res.json({
+                valida: false,
+                status: "EXPIRADO",
+                diasRestantes: 0
+            });
+        }
 
         if (lic.dispositivo_id && lic.dispositivo_id !== deviceId) {
             return res.json({ valida: false });
         }
 
+        const diasRestantes = Math.ceil((lic.expira_em - agora) / 86400000);
+
+        let statusDetalhado = "ATIVA";
+
+        if (diasRestantes <= 3) statusDetalhado = "VENCENDO";
+        if (diasRestantes <= 0) statusDetalhado = "EXPIRADA";
+
         res.json({
             valida: true,
             status: lic.statusFinal,
-            dataValidade: lic.expira_em
+            dataValidade: lic.expira_em,
+            diasRestantes,
+            statusDetalhado
         });
 
     } catch (err) {
