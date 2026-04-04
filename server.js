@@ -406,48 +406,63 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
 
     res.json({ ok: true });
 });
-
 // =============================
-// 🔹 CRIAR USUÁRIO (COM LIMITE)
+// 🔹 CRIAR USUÁRIO (CORRIGIDO)
 // =============================
 app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
     try {
 
         const { chave, nome, email, senha } = req.body;
 
-        const { rows } = await pool.query("SELECT * FROM licencas WHERE chave=$1", [chave]);
-        const lic = rows[0];
+        console.log("🔥 [CRIAR USUARIO] chave:", chave);
+        console.log("🔥 [CRIAR USUARIO] email:", email);
 
-        if (!lic) return res.status(404).json({ erro: "Licença não encontrada" });
+        if (!chave) {
+            console.log("❌ Chave não enviada");
+            return res.status(400).json({ erro: "Chave obrigatória" });
+        }
 
-        const count = await pool.query(
-            "SELECT COUNT(*) FROM usuarios WHERE licenca_chave=$1",
+        const { rows } = await pool.query(
+            "SELECT * FROM licencas WHERE chave = $1",
             [chave]
         );
 
-        if (Number(count.rows[0].count) >= (lic.max_usuarios || 3)) {
-            return res.status(403).json({ erro: "Limite de usuários atingido" });
+        console.log("🔥 [CRIAR USUARIO] rows:", rows.length);
+
+        const lic = rows[0];
+
+        if (!lic) {
+            console.log("❌ Licença não encontrada no banco");
+            return res.status(404).json({ erro: "Licença não encontrada" });
         }
 
+        // 🔥 VALIDA STATUS
+        if (lic.statusfinal !== "ATIVO") {
+            console.log("❌ Licença não ativa:", lic.statusfinal);
+            return res.status(403).json({ erro: "Licença não ativa" });
+        }
+
+        // 🔥 CRIPTOGRAFAR SENHA
+        const bcrypt = require("bcrypt");
         const senhaHash = await bcrypt.hash(senha, 10);
 
         await pool.query(
-            "INSERT INTO usuarios (nome, email, senha, licenca_chave) VALUES ($1,$2,$3,$4)",
-            [nome || email, email, senhaHash, chave]
+            `
+            INSERT INTO usuarios (nome, email, senha_hash, licenca_chave)
+            VALUES ($1, $2, $3, $4)
+            `,
+            [nome, email, senhaHash, chave]
         );
+
+        console.log("✅ Usuário criado com sucesso");
 
         res.json({ sucesso: true });
 
     } catch (err) {
-
-        if (err.message.includes("duplicate")) {
-            return res.status(400).json({ erro: "Usuário já existe" });
-        }
-
-        res.status(500).json({ erro: "Erro ao criar usuário" });
+        console.error("❌ ERRO CRIAR USUARIO:", err);
+        res.status(500).json({ erro: "Erro interno" });
     }
 });
-
 // =============================
 // 🔹 USUÁRIOS
 // =============================
