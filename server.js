@@ -407,7 +407,7 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
     res.json({ ok: true });
 });
 // =============================
-// 🔹 CRIAR USUÁRIO (ULTRA DEBUG)
+// 🔹 CRIAR USUÁRIO (AJUSTADO AO SEU BANCO)
 // =============================
 app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
     try {
@@ -416,7 +416,6 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         console.log("🔥 [CRIAR USUARIO]");
         console.log("chave:", chave);
-        console.log("nome:", nome);
         console.log("email:", email);
 
         if (!chave || !email || !senha) {
@@ -427,8 +426,6 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
             "SELECT * FROM licencas WHERE chave = $1",
             [chave]
         );
-
-        console.log("🔥 Licença encontrada:", rows.length);
 
         const lic = rows[0];
 
@@ -450,7 +447,7 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
             INSERT INTO usuarios (
                 nome,
                 email,
-                senha_hash,
+                senha,
                 licenca_chave
             )
             VALUES ($1, $2, $3, $4)
@@ -458,18 +455,13 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
             [nome, email, senhaHash, chave]
         );
 
-        console.log("✅ Usuário criado");
+        console.log("✅ Usuário criado com sucesso");
 
         res.json({ sucesso: true });
 
     } catch (err) {
         console.error("❌ ERRO CRIAR USUARIO:", err.message);
-        console.error("❌ STACK:", err.stack);
-
-        res.status(500).json({
-            erro: "Erro interno",
-            detalhe: err.message // 🔥 ISSO AQUI É OURO PRA DEBUG
-        });
+        res.status(500).json({ erro: "Erro interno", detalhe: err.message });
     }
 });
 // =============================
