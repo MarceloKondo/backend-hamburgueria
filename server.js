@@ -407,19 +407,20 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
     res.json({ ok: true });
 });
 // =============================
-// 🔹 CRIAR USUÁRIO (CORRIGIDO)
+// 🔹 CRIAR USUÁRIO (ULTRA DEBUG)
 // =============================
 app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
     try {
 
         const { chave, nome, email, senha } = req.body;
 
-        console.log("🔥 [CRIAR USUARIO] chave:", chave);
-        console.log("🔥 [CRIAR USUARIO] email:", email);
+        console.log("🔥 [CRIAR USUARIO]");
+        console.log("chave:", chave);
+        console.log("nome:", nome);
+        console.log("email:", email);
 
-        if (!chave) {
-            console.log("❌ Chave não enviada");
-            return res.status(400).json({ erro: "Chave obrigatória" });
+        if (!chave || !email || !senha) {
+            return res.status(400).json({ erro: "Dados obrigatórios faltando" });
         }
 
         const { rows } = await pool.query(
@@ -427,40 +428,48 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
             [chave]
         );
 
-        console.log("🔥 [CRIAR USUARIO] rows:", rows.length);
+        console.log("🔥 Licença encontrada:", rows.length);
 
         const lic = rows[0];
 
         if (!lic) {
-            console.log("❌ Licença não encontrada no banco");
             return res.status(404).json({ erro: "Licença não encontrada" });
         }
 
-        // 🔥 VALIDA STATUS
         if (lic.statusfinal !== "ATIVO") {
-            console.log("❌ Licença não ativa:", lic.statusfinal);
             return res.status(403).json({ erro: "Licença não ativa" });
         }
 
-        // 🔥 CRIPTOGRAFAR SENHA
         const bcrypt = require("bcrypt");
         const senhaHash = await bcrypt.hash(senha, 10);
 
+        console.log("🔥 Inserindo usuário...");
+
         await pool.query(
             `
-            INSERT INTO usuarios (nome, email, senha_hash, licenca_chave)
+            INSERT INTO usuarios (
+                nome,
+                email,
+                senha_hash,
+                licenca_chave
+            )
             VALUES ($1, $2, $3, $4)
             `,
             [nome, email, senhaHash, chave]
         );
 
-        console.log("✅ Usuário criado com sucesso");
+        console.log("✅ Usuário criado");
 
         res.json({ sucesso: true });
 
     } catch (err) {
-        console.error("❌ ERRO CRIAR USUARIO:", err);
-        res.status(500).json({ erro: "Erro interno" });
+        console.error("❌ ERRO CRIAR USUARIO:", err.message);
+        console.error("❌ STACK:", err.stack);
+
+        res.status(500).json({
+            erro: "Erro interno",
+            detalhe: err.message // 🔥 ISSO AQUI É OURO PRA DEBUG
+        });
     }
 });
 // =============================
