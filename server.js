@@ -35,7 +35,8 @@ async function startServer() {
                 nome TEXT,
                 email TEXT UNIQUE,
                 senha TEXT,
-                criado_em BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
+                criado_em BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
+                licenca_chave TEXT
             );
         `);
 
@@ -52,7 +53,8 @@ async function startServer() {
                 usuario_senha TEXT,
                 ultimo_uso BIGINT,
                 data_ativacao BIGINT,
-                tentativas_invalidas INTEGER DEFAULT 0
+                tentativas_invalidas INTEGER DEFAULT 0,
+                max_usuarios INTEGER DEFAULT 3
             );
         `);
 
@@ -112,7 +114,8 @@ app.post("/auth/login", async (req, res) => {
             usuario: {
                 id: usuario.id,
                 nome: usuario.nome,
-                email: usuario.email
+                email: usuario.email,
+                licenca: usuario.licenca_chave
             }
         });
 
@@ -136,12 +139,12 @@ app.get("/api/v1/licenca/painel", async (req, res) => {
 app.post("/api/v1/licenca/gerar", async (req, res) => {
     console.log("REQ BODY:", req.body);
 
-    const { cliente, dias } = req.body;
+    const { cliente, dias, maxUsuarios } = req.body;
 
     const diasNum = Number(dias);
     const diasFinal = (!diasNum || isNaN(diasNum) || diasNum <= 0) ? 30 : diasNum;
 
-    console.log("DIAS RECEBIDO:", dias, "-> convertido:", diasFinal);
+    const max = (!maxUsuarios || isNaN(maxUsuarios) || maxUsuarios <= 0) ? 3 : Number(maxUsuarios);
 
     const chave = require("crypto").randomBytes(16).toString("hex");
 
@@ -149,8 +152,8 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
     const expira_em = agora + (diasFinal * 86400000);
 
     await pool.query(
-        "INSERT INTO licencas (cliente_nome, chave, statusFinal, expira_em) VALUES ($1,$2,$3,$4)",
-        [cliente, chave, "ATIVO", expira_em]
+        "INSERT INTO licencas (cliente_nome, chave, statusFinal, expira_em, max_usuarios) VALUES ($1,$2,$3,$4,$5)",
+        [cliente, chave, "ATIVO", expira_em, max]
     );
 
     res.json({ ok: true, chave, dias: diasFinal });
@@ -403,11 +406,25 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
     try {
         const { chave, nome, email, senha } = req.body;
 
+        const { rows } = await pool.query("SELECT * FROM licencas WHERE chave=$1", [chave]);
+        const lic = rows[0];
+
+        if (!lic) return res.status(404).json({ erro: "Licença não encontrada" });
+
+        const count = await pool.query(
+            "SELECT COUNT(*) FROM usuarios WHERE licenca_chave=$1",
+            [chave]
+        );
+
+        if (Number(count.rows[0].count) >= (lic.max_usuarios || 3)) {
+            return res.status(403).json({ erro: "Limite de usuários atingido" });
+        }
+
         const senhaHash = await bcrypt.hash(senha, 10);
 
         await pool.query(
-            "INSERT INTO usuarios (nome, email, senha) VALUES ($1,$2,$3)",
-            [nome || email, email, senhaHash]
+            "INSERT INTO usuarios (nome, email, senha, licenca_chave) VALUES ($1,$2,$3,$4)",
+            [nome || email, email, senhaHash, chave]
         );
 
         await pool.query(
@@ -433,8 +450,11 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 // =============================
 app.get("/api/v1/licenca/usuarios", async (req, res) => {
     try {
+        const { chave } = req.query;
+
         const { rows } = await pool.query(
-            "SELECT id, nome, email, criado_em FROM usuarios ORDER BY id DESC"
+            "SELECT id, nome, email, criado_em FROM usuarios WHERE licenca_chave=$1 ORDER BY id DESC",
+            [chave]
         );
 
         res.json(rows);
@@ -442,23 +462,6 @@ app.get("/api/v1/licenca/usuarios", async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ erro: "Erro ao listar usuários" });
-    }
-});
-
-app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
-    try {
-        const { id } = req.body;
-
-        await pool.query(
-            "DELETE FROM usuarios WHERE id=$1",
-            [id]
-        );
-
-        res.json({ ok: true });
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: "Erro ao deletar usuário" });
     }
 });
 
