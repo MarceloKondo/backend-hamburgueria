@@ -190,76 +190,143 @@ app.post("/api/v1/licenca/desbloquear", async (req, res) => {
 });
 
 // =============================
-// 🔹 ATIVAR
+// 🔹 ATIVAR (CORRIGIDO)
 // =============================
 app.post("/api/v1/licenca/ativar", async (req, res) => {
-
-    const { chave, deviceId } = req.body;
-
-    const { rows } = await pool.query("SELECT * FROM licencas WHERE chave=$1", [chave]);
-    const lic = rows[0];
-
-    if (!lic) return res.status(404).json({ erro: "Licença não encontrada" });
-    if (lic.statusFinal === "BLOQUEADO") return res.status(403).json({ erro: "Bloqueado" });
-
-    const expira = Number(lic.expira_em);
-    if (Date.now() > expira) return res.status(403).json({ erro: "Expirada" });
-
-    await pool.query(
-        "UPDATE licencas SET dispositivo_id=$1, data_ativacao=$2, ultimo_uso=$3 WHERE chave=$4",
-        [deviceId, Date.now(), Date.now(), chave]
-    );
-
-    res.json({ sucesso: true });
-});
-
-// =============================
-// 🔹 VALIDAR
-// =============================
-app.post("/api/v1/licenca/validar", async (req, res) => {
     try {
 
         const { chave, deviceId } = req.body;
+
+        console.log("🔥 [ATIVAR] chave:", chave);
+        console.log("🔥 [ATIVAR] deviceId:", deviceId);
+        console.log("🔥 [ATIVAR] DATABASE:", process.env.DATABASE_URL);
 
         const { rows } = await pool.query(
             "SELECT * FROM licencas WHERE chave = $1",
             [chave]
         );
 
+        console.log("🔥 [ATIVAR] rows encontradas:", rows.length);
+
         const lic = rows[0];
 
-        if (!lic) return res.json({ valida: false });
+        if (!lic) {
+            console.log("❌ Licença não encontrada");
+            return res.status(404).json({ erro: "Licença não encontrada" });
+        }
+
+        if (lic.statusfinal === "BLOQUEADO") {
+            console.log("❌ Licença bloqueada");
+            return res.status(403).json({ erro: "Bloqueado" });
+        }
+
+        const expira = Number(lic.expira_em);
+
+        if (Date.now() > expira) {
+            console.log("❌ Licença expirada");
+            return res.status(403).json({ erro: "Expirada" });
+        }
+
+        // 🔥 ATIVA DE VERDADE
+        await pool.query(
+            `
+            UPDATE licencas 
+            SET 
+                dispositivo_id = $1,
+                data_ativacao = $2,
+                ultimo_uso = $3,
+                statusfinal = 'ATIVO'
+            WHERE chave = $4
+            `,
+            [deviceId, Date.now(), Date.now(), chave]
+        );
+
+        console.log("✅ Licença ativada com sucesso");
+
+        res.json({ sucesso: true });
+
+    } catch (err) {
+        console.error("❌ ERRO ATIVAR:", err);
+        res.status(500).json({ erro: "Erro interno" });
+    }
+});
+// =============================
+// 🔹 VALIDAR (CORRIGIDO)
+// =============================
+app.post("/api/v1/licenca/validar", async (req, res) => {
+    try {
+
+        const { chave, deviceId } = req.body;
+
+        console.log("🔥 [VALIDAR] chave:", chave);
+        console.log("🔥 [VALIDAR] deviceId:", deviceId);
+
+        const { rows } = await pool.query(
+            "SELECT * FROM licencas WHERE chave = $1",
+            [chave]
+        );
+
+        console.log("🔥 [VALIDAR] rows encontradas:", rows.length);
+
+        const lic = rows[0];
+
+        if (!lic) {
+            console.log("❌ Licença não encontrada");
+            return res.json({ valida: false });
+        }
 
         const agora = Date.now();
         const expiraEm = Number(lic.expira_em);
 
+        // 🔥 LOG COMPLETO
+        console.log("📦 Licença encontrada:", {
+            status: lic.statusfinal,
+            deviceSalvo: lic.dispositivo_id,
+            expiraEm
+        });
+
+        // 🔥 ATUALIZA USO
         await pool.query(
             "UPDATE licencas SET ultimo_uso = $1 WHERE chave = $2",
             [agora, chave]
         );
 
+        // 🔥 VALIDA DEVICE
         if (lic.dispositivo_id && deviceId && lic.dispositivo_id !== deviceId) {
+            console.log("❌ Device diferente");
             return res.json({ valida: false });
         }
 
+        // 🔥 PRIMEIRA ATIVAÇÃO (GRAVA DEVICE SE NÃO EXISTIR)
         if (!lic.dispositivo_id && deviceId) {
+            console.log("⚠️ Gravando deviceId na licença");
             await pool.query(
                 "UPDATE licencas SET dispositivo_id = $1 WHERE chave = $2",
                 [deviceId, chave]
             );
         }
 
-        if (lic.statusFinal !== "ATIVO") {
+        // 🔥 STATUS
+        if (lic.statusfinal !== "ATIVO") {
+            console.log("❌ Status não ativo:", lic.statusfinal);
             return res.json({ valida: false });
         }
 
+        // 🔥 EXPIRAÇÃO
         if (agora > expiraEm) {
+            console.log("❌ Licença expirada");
             return res.json({ valida: false });
         }
 
-        res.json({ valida: true });
+        console.log("✅ Licença válida");
+
+        res.json({
+            valida: true,
+            expiraEm: expiraEm
+        });
 
     } catch (err) {
+        console.error("❌ ERRO VALIDAR:", err);
         res.status(500).json({ valida: false });
     }
 });
