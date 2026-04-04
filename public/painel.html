@@ -32,7 +32,7 @@ body {
     padding:15px;
     border-radius:8px;
     text-align:center;
-    min-width:120px;
+    min-width:140px;
 }
 
 input {
@@ -102,6 +102,7 @@ th, td {
     <h3>➕ Gerar Licença</h3>
     <input id="cliente" placeholder="Cliente">
     <input id="dias" type="number" placeholder="Dias">
+    <input id="maxUsuarios" type="number" placeholder="Max usuários">
     <button class="btn-blue" onclick="gerar()">Gerar</button>
 
     <table id="tabela"></table>
@@ -114,7 +115,7 @@ th, td {
     
 <div id="usuarios" class="hidden">
     <h3>👤 Usuários</h3>
-    <table id="tabelaUsuarios"></table>
+    <div id="usuariosContent"></div>
 </div>
 
 </div>
@@ -123,6 +124,7 @@ th, td {
 
 const API = "/api/v1/licenca";
 const SENHA = "Mk@td040184";
+let licencaSelecionada = null;
 
 function login(){
     const s = document.getElementById("senha").value;
@@ -160,7 +162,11 @@ function trocarTab(tab){
     } 
     else if(tab === "usuarios"){
         usr.style.display = "block";
-        carregarUsuarios();
+        if(!licencaSelecionada){
+            document.getElementById("usuariosContent").innerHTML = "Selecione uma licença";
+        } else {
+            carregarUsuarios(licencaSelecionada);
+        }
     }
     else {
         lic.style.display = "block";
@@ -171,13 +177,12 @@ async function carregar(){
     const res = await fetch(API + "/painel");
     const dados = await res.json();
 
-    let html = "<tr><th>Cliente</th><th>Status</th><th>Chave</th><th>Dias</th><th>Ações</th></tr>";
+    let html = "<tr><th>Cliente</th><th>Status</th><th>Chave</th><th>Dias</th><th>Usuários</th><th>Ações</th></tr>";
 
     dados.forEach(l=>{
 
-        const status = l.statusFinal || l.status || "DESCONHECIDO";
+        const status = l.statusFinal || "-";
 
-        // 🔥 CORREÇÃO DO +1 DIA
         let diff = (l.expira_em || 0) - Date.now();
         let dias = Math.floor(diff / 86400000);
         if(isNaN(dias) || dias < 0) dias = 0;
@@ -186,9 +191,11 @@ async function carregar(){
         <tr>
             <td>${l.cliente_nome || "-"}</td>
             <td>${status}</td>
-            <td>${l.chave || "-"}</td>
+            <td>${l.chave}</td>
             <td>${dias}</td>
+            <td>${l.usuarios_usados} / ${l.max_usuarios}</td>
             <td>
+                <button class="btn-green" onclick="abrirUsuarios('${l.chave}')">Users</button>
                 <button class="btn-red" onclick="bloquear('${l.chave}')">Bloq</button>
                 <button class="btn-green" onclick="desbloquear('${l.chave}')">OK</button>
                 <button class="btn-yellow" onclick="resetar('${l.chave}')">Reset</button>
@@ -202,20 +209,19 @@ async function carregar(){
     document.getElementById("tabela").innerHTML = html;
 }
 
+function abrirUsuarios(chave){
+    licencaSelecionada = chave;
+    trocarTab('usuarios');
+}
+
 async function gerar(){
-    const diasRaw = document.getElementById("dias").value.trim();
-    const diasNum = Number(diasRaw);
-
-    const diasFinal = (!diasRaw || isNaN(diasNum) || diasNum <= 0)
-        ? 30
-        : diasNum;
-
     await fetch(API+"/gerar",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
             cliente:document.getElementById("cliente").value,
-            dias: diasFinal
+            dias:Number(document.getElementById("dias").value) || 30,
+            maxUsuarios:Number(document.getElementById("maxUsuarios").value) || 3
         })
     });
 
@@ -251,6 +257,110 @@ async function deletar(c){
 function copiar(c){
     navigator.clipboard.writeText(c);
     alert("Copiado!");
+}
+
+async function carregarEventos(){
+    const res = await fetch(API+"/evento");
+    const dados = await res.json();
+
+    let html = "<tr><th>Tipo</th><th>Email</th><th>Device</th><th>Data</th></tr>";
+
+    dados.forEach(e=>{
+        html += `<tr>
+            <td>${e.tipo}</td>
+            <td>${e.email || '-'}</td>
+            <td>${e.device_id || '-'}</td>
+            <td>${new Date(Number(e.data)).toLocaleString()}</td>
+        </tr>`;
+    });
+
+    document.getElementById("tabelaEventos").innerHTML = html;
+}
+
+async function carregarUsuarios(chave){
+
+    const res = await fetch(API+`/usuarios?chave=${chave}`);
+    const users = await res.json();
+
+    let html = `<h4>Licença: ${chave}</h4>`;
+
+    html += `
+    <input id="nome" placeholder="Nome">
+    <input id="email" placeholder="Email">
+    <input id="senhaNovo" placeholder="Senha">
+    <button onclick="criarUsuario()">Criar</button>
+    `;
+
+    users.forEach(u=>{
+        html += `
+        <div class="card">
+            <input id="n_${u.id}" value="${u.nome}">
+            <input id="e_${u.id}" value="${u.email}">
+
+            <button onclick="editar(${u.id})">Salvar</button>
+            <button onclick="resetarSenha(${u.id})">Reset</button>
+            <button onclick="deletarUsuario(${u.id})">Excluir</button>
+        </div>
+        `;
+    });
+
+    document.getElementById("usuariosContent").innerHTML = html;
+}
+
+async function criarUsuario(){
+
+    const nome = document.getElementById("nome").value;
+    const email = document.getElementById("email").value;
+    const senha = document.getElementById("senhaNovo").value;
+
+    const res = await fetch(API+"/criar-usuario",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({chave:licencaSelecionada,nome,email,senha})
+    });
+
+    const data = await res.json();
+    if(data.erro){ alert(data.erro); return; }
+
+    carregarUsuarios(licencaSelecionada);
+}
+
+async function editar(id){
+    await fetch(API+"/editar-usuario",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+            id,
+            nome:document.getElementById("n_"+id).value,
+            email:document.getElementById("e_"+id).value
+        })
+    });
+    alert("Atualizado");
+}
+
+async function resetarSenha(id){
+    const senha = prompt("Nova senha:");
+    if(!senha) return;
+
+    await fetch(API+"/resetar-senha",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({id,novaSenha:senha})
+    });
+
+    alert("Senha atualizada");
+}
+
+async function deletarUsuario(id){
+    if(!confirm("Excluir usuário?")) return;
+
+    await fetch(API+"/deletar-usuario",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({id})
+    });
+
+    carregarUsuarios(licencaSelecionada);
 }
 
 setInterval(()=>{
