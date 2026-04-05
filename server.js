@@ -7,7 +7,7 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
-
+const path = require("path");
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -21,6 +21,10 @@ const SECRET = "SUPER_SECRET_KEY";
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
+});
+
+app.get("/app.apk", (req, res) => {
+    res.download(path.resolve(__dirname, "app.apk"));
 });
 
 // =============================
