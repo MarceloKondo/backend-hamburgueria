@@ -126,6 +126,18 @@ app.post("/auth/login", async (req, res) => {
 });
 
 // =============================
+// 🔹 IMPORTANTE - APP VERSAO
+// =============================
+app.get("/api/v1/app/versao", async (req, res) => {
+    res.json({
+        versionCode: 1, // 🔥 ATUALIZE MANUALMENTE
+        versionName: "1.0.2",
+        forceUpdate: true,
+        apkUrl: "https://hamburgueria-api-74br.onrender.com/app.apk",
+        mensagem: "Atualização obrigatória disponível!!"
+    });
+});
+// =============================
 // 🔹 PAINEL (COM USUÁRIOS)
 // =============================
 app.get("/api/v1/licenca/painel", async (req, res) => {
