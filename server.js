@@ -33,16 +33,17 @@ app.get("/app.apk", (req, res) => {
 async function startServer() {
     try {
 
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id SERIAL PRIMARY KEY,
-                nome TEXT,
-                email TEXT UNIQUE,
-                senha TEXT,
-                criado_em BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
-                licenca_chave TEXT
-            );
-        `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id SERIAL PRIMARY KEY,
+        nome TEXT,
+        email TEXT UNIQUE,
+        senha TEXT,
+        criado_em BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
+        licenca_chave TEXT,
+        is_owner BOOLEAN DEFAULT FALSE
+    );
+`);
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS licencas (
@@ -116,11 +117,12 @@ app.post("/auth/login", async (req, res) => {
         res.json({
             token,
             usuario: {
-                id: usuario.id,
-                nome: usuario.nome,
-                email: usuario.email,
-                licenca: usuario.licenca_chave
-            }
+    id: usuario.id,
+    nome: usuario.nome,
+    email: usuario.email,
+    licenca: usuario.licenca_chave,
+    isOwner: usuario.is_owner // 🔥 AQUI
+}
         });
 
     } catch (err) {
@@ -465,18 +467,31 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         console.log("🔥 Inserindo usuário...");
 
-        await pool.query(
-            `
-            INSERT INTO usuarios (
-                nome,
-                email,
-                senha,
-                licenca_chave
-            )
-            VALUES ($1, $2, $3, $4)
-            `,
-            [nome, email, senhaHash, chave]
-        );
+   // 🔥 verifica se já existe owner nessa licença
+const ownerExistente = await pool.query(
+    `
+    SELECT 1 FROM usuarios 
+    WHERE licenca_chave = $1 AND is_owner = true
+    LIMIT 1
+    `,
+    [chave]
+);
+
+const isOwner = ownerExistente.rowCount === 0;
+
+await pool.query(
+    `
+    INSERT INTO usuarios (
+        nome,
+        email,
+        senha,
+        licenca_chave,
+        is_owner
+    )
+    VALUES ($1, $2, $3, $4, $5)
+    `,
+    [nome, email, senhaHash, chave, isOwner]
+);
 
         console.log("✅ Usuário criado com sucesso");
 
