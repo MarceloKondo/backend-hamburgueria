@@ -129,13 +129,20 @@ app.post("/auth/login", async (req, res) => {
 // 🔹 IMPORTANTE - APP VERSAO
 // =============================
 app.get("/api/v1/app/versao", async (req, res) => {
-    res.json({
-        versionCode: 1, // 🔥 ATUALIZE MANUALMENTE
-        versionName: "1.0.2",
-        forceUpdate: true,
-        apkUrl: "https://hamburgueria-api-74br.onrender.com/app.apk",
-        mensagem: "Atualização obrigatória disponível!!"
-    });
+    try {
+        res.json({
+            versionCode: 2,
+            versionName: "1.0.1",
+            forceUpdate: true,
+            apkUrl: "https://hamburgueria-api-74br.onrender.com/app.apk",
+            mensagem: "Atualização obrigatória disponível!!"
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            erro: "Erro interno"
+        });
+    }
 });
 // =============================
 // 🔹 PAINEL (COM USUÁRIOS)
