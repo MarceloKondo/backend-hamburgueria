@@ -506,11 +506,10 @@ await pool.query(
 // 🔹 USUÁRIOS
 // =============================
 app.get("/api/v1/licenca/usuarios", async (req, res) => {
-
     const { chave } = req.query;
 
     const { rows } = await pool.query(
-        "SELECT id, nome, email, criado_em FROM usuarios WHERE licenca_chave=$1 ORDER BY id DESC",
+        "SELECT id, nome, email, criado_em, is_owner FROM usuarios WHERE licenca_chave=$1 ORDER BY id DESC",
         [chave]
     );
 
