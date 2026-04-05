@@ -135,7 +135,7 @@ app.post("/auth/login", async (req, res) => {
 app.get("/api/v1/app/versao", async (req, res) => {
     try {
         res.json({
-            versionCode: 3,
+            versionCode: 1,
             versionName: "1.0.1",
             forceUpdate: true,
             apkUrl: "https://hamburgueria-api-74br.onrender.com/app.apk",
