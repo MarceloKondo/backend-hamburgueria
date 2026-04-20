@@ -431,6 +431,156 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
 
     res.json({ ok: true });
 });
+
+
+// =============================
+// 🔹 PRODUTOS (COM SYNC)
+// =============================
+
+app.get("/api/v1/produtos", async (req, res) => {
+
+    const { chave, lastSync } = req.query;
+
+    let query = `
+        SELECT * FROM produtos
+        WHERE licenca_chave = $1
+    `;
+
+    const params = [chave];
+
+    if (lastSync) {
+        query += " AND updated_at > $2";
+        params.push(Number(lastSync));
+    }
+
+    const { rows } = await pool.query(query, params);
+
+    res.json(rows);
+});
+
+// =============================
+// 🔹 EDITAR PRODUTO
+// =============================
+app.post("/api/v1/produtos/editar", async (req, res) => {
+    try {
+
+        const {
+            id,
+            nome,
+            unidade,
+            categoria,
+            descricao,
+            usarEmPrato,
+            extra,
+            bebida,
+            operacional,
+            quantidadePadrao,
+            medidaPadrao
+        } = req.body;
+
+        if (!id) {
+            return res.status(400).json({ erro: "ID obrigatório" });
+        }
+
+        await pool.query(
+            `
+            UPDATE produtos SET
+                nome = $1,
+                unidade = $2,
+                categoria = $3,
+                descricao = $4,
+                usar_em_prato = $5,
+                extra = $6,
+                bebida = $7,
+                operacional = $8,
+                quantidade_padrao = $9,
+                medida_padrao = $10,
+                updated_at = $11
+            WHERE id = $12
+            `,
+            [
+                nome,
+                unidade,
+                categoria,
+                descricao,
+                usarEmPrato,
+                extra,
+                bebida,
+                operacional,
+                quantidadePadrao,
+                medidaPadrao,
+                Date.now(),
+                id
+            ]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error("❌ ERRO EDITAR PRODUTO:", err);
+        res.status(500).json({ erro: "Erro interno" });
+    }
+});
+// =============================
+// 🔹 PRODUTOS DELETAR
+// =============================
+app.post("/api/v1/produtos/deletar", async (req, res) => {
+
+    const { id } = req.body;
+
+    await pool.query(
+        `
+        UPDATE produtos
+        SET deleted = true, updated_at = $1
+        WHERE id = $2
+        `,
+        [Date.now(), id]
+    );
+
+    res.json({ ok: true });
+});
+// =============================
+// 🔹 PRODUTOS CRIAR
+// =============================
+app.post("/api/v1/produtos/criar", async (req, res) => {
+
+    const {
+        chave,
+        nome,
+        unidade,
+        categoria,
+        descricao,
+        usarEmPrato,
+        extra,
+        bebida,
+        operacional,
+        quantidadePadrao,
+        medidaPadrao
+    } = req.body;
+
+    const { rows } = await pool.query(
+        `
+        INSERT INTO produtos (
+            nome, unidade, categoria, descricao,
+            usar_em_prato, extra, bebida, operacional,
+            quantidade_padrao, medida_padrao,
+            licenca_chave,
+            updated_at
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        RETURNING id
+        `,
+        [
+            nome, unidade, categoria, descricao,
+            usarEmPrato, extra, bebida, operacional,
+            quantidadePadrao, medidaPadrao,
+            chave,
+            Date.now()
+        ]
+    );
+
+    res.json({ id: rows[0].id });
+});
 // =============================
 // 🔹 CRIAR USUÁRIO (AJUSTADO AO SEU BANCO)
 // =============================
@@ -503,15 +653,28 @@ await pool.query(
     }
 });
 // =============================
-// 🔹 USUÁRIOS
+// 🔹 USUÁRIOS (COM SYNC)
 // =============================
 app.get("/api/v1/licenca/usuarios", async (req, res) => {
-    const { chave } = req.query;
 
-    const { rows } = await pool.query(
-        "SELECT id, nome, email, criado_em, is_owner FROM usuarios WHERE licenca_chave=$1 ORDER BY id DESC",
-        [chave]
-    );
+    const { chave, lastSync } = req.query;
+
+    let query = `
+        SELECT id, nome, email, criado_em, is_owner, updated_at, deleted
+        FROM usuarios 
+        WHERE licenca_chave=$1
+    `;
+
+    const params = [chave];
+
+    if (lastSync) {
+        query += " AND updated_at > $2";
+        params.push(Number(lastSync));
+    }
+
+    query += " ORDER BY id DESC";
+
+    const { rows } = await pool.query(query, params);
 
     res.json(rows);
 });
@@ -524,8 +687,10 @@ app.post("/api/v1/licenca/editar-usuario", async (req, res) => {
     const { id, nome, email } = req.body;
 
     await pool.query(
-        "UPDATE usuarios SET nome=$1, email=$2 WHERE id=$3",
-        [nome, email, id]
+        `UPDATE usuarios 
+         SET nome=$1, email=$2, updated_at=$3 
+         WHERE id=$4`,
+        [nome, email, Date.now(), id]
     );
 
     res.json({ ok: true });
@@ -556,8 +721,8 @@ app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
     const { id } = req.body;
 
     await pool.query(
-        "DELETE FROM usuarios WHERE id=$1",
-        [id]
+        `UPDATE usuarios SET deleted = true, updated_at = $1 WHERE id=$2`,
+        [Date.now(), id]
     );
 
     res.json({ ok: true });
