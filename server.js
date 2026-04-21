@@ -93,12 +93,13 @@ startServer();
 // =============================
 app.post("/auth/login", async (req, res) => {
     try {
-        const { email, senha } = req.body;
+        const { email, senha, chave } = req.body;
 
   const result = await pool.query(
     `SELECT * FROM usuarios 
-     WHERE LOWER(email)=LOWER($1) 
-     AND deleted IS NOT TRUE`,
+WHERE LOWER(email)=LOWER($1) 
+AND licenca_chave = $2
+AND deleted IS NOT TRUE`,
     [email]
 );
 
@@ -829,7 +830,7 @@ app.get("/api/v1/licenca/usuarios", async (req, res) => {
     let query = `
         SELECT id, nome, email, criado_em, is_owner, updated_at, deleted
         FROM usuarios 
-       WHERE licenca_chave=$1 AND deleted IS NOT TRUE
+        WHERE licenca_chave=$1
     `;
 
     const params = [chave];
@@ -843,7 +844,7 @@ app.get("/api/v1/licenca/usuarios", async (req, res) => {
 
     const { rows } = await pool.query(query, params);
 
-    res.json(rows);
+    res.json({ lista: rows });
 });
 
 // =============================
@@ -885,10 +886,16 @@ app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
 // =============================
 app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
 
-    const { userId } = req.body;
+    const { id } = req.body;
+
+    if (!id) {
+        return res.status(400).json({ erro: "ID obrigatório" });
+    }
 
     await pool.query(
-        `UPDATE usuarios SET deleted = true, updated_at = $1 WHERE id=$2`,
+        `UPDATE usuarios 
+         SET deleted = true, updated_at = $1 
+         WHERE id = $2`,
         [Date.now(), id]
     );
 
