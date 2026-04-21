@@ -431,7 +431,96 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
 
     res.json({ ok: true });
 });
+// =============================
+// 🔹 PRATOS 
+// =============================
+app.get("/api/v1/pratos", async (req, res) => {
+    try {
 
+        const pratos = await pool.query(`SELECT * FROM prato ORDER BY id DESC`);
+
+        res.json({ lista: pratos.rows });
+
+    } catch (err) {
+        res.status(500).json({ erro: "erro interno" });
+    }
+});
+// =============================
+// 🔹 PRATOS DELETAR
+// =============================
+app.post("/api/v1/pratos/deletar", async (req, res) => {
+    try {
+
+        const { id } = req.body;
+
+        await pool.query(`DELETE FROM prato WHERE id=$1`, [id]);
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        res.status(500).json({ erro: "erro interno" });
+    }
+});
+// =============================
+// 🔹 PRATOS SALVAR
+// =============================
+app.post("/api/v1/pratos/salvar", async (req, res) => {
+    try {
+
+        const { id, nome, canal, ingredientes } = req.body;
+
+        let pratoId = id;
+
+        // =========================
+        // CREATE ou UPDATE PRATO
+        // =========================
+        if (!id) {
+            const result = await pool.query(
+                `INSERT INTO prato (nome, canal, data_venda)
+                 VALUES ($1, $2, $3)
+                 RETURNING id`,
+                [nome, canal || "", Date.now()]
+            );
+
+            pratoId = result.rows[0].id;
+        } else {
+            await pool.query(
+                `UPDATE prato SET nome=$1, canal=$2 WHERE id=$3`,
+                [nome, canal || "", id]
+            );
+
+            // limpa ingredientes antigos
+            await pool.query(
+                `DELETE FROM prato_ingrediente WHERE prato_id=$1`,
+                [id]
+            );
+        }
+
+        // =========================
+        // INGREDIENTES
+        // =========================
+        for (const ing of ingredientes) {
+            await pool.query(
+                `INSERT INTO prato_ingrediente 
+                 (prato_id, ingrediente_id, quantidade, preco_medio, nome)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [
+                    pratoId,
+                    ing.ingredienteId,
+                    ing.quantidade,
+                    ing.precoMedio || 0,
+                    ing.nome
+                ]
+            );
+        }
+
+        res.json({ ok: true, id: pratoId });
+
+    } catch (err) {
+        console.error("ERRO PRATO:", err);
+        res.status(500).json({ erro: "erro interno" });
+    }
+});
 
 // =============================
 // 🔹 PRODUTOS (COM SYNC)
