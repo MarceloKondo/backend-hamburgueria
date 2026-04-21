@@ -163,17 +163,25 @@ app.get("/api/v1/licenca/painel", async (req, res) => {
 
     for (let lic of rows) {
  const count = await pool.query(
-    `SELECT COUNT(*)   
-     FROM usuarios 
-     WHERE licenca_chave=$1 
-     AND deleted IS NOT TRUE`,
+    `SELECT COUNT(*) FROM usuarios 
+     WHERE licenca_chave=$1 AND deleted IS NOT TRUE`,
     [lic.chave]
 );
 
-        resultado.push({
-            ...lic,
-            usuarios_usados: Number(count.rows[0].count)
-        });
+const owner = await pool.query(
+    `SELECT email FROM usuarios 
+     WHERE licenca_chave=$1 
+     AND is_owner = true 
+     AND deleted IS NOT TRUE
+     LIMIT 1`,
+    [lic.chave]
+);
+        
+resultado.push({
+    ...lic,
+    usuarios_usados: Number(count.rows[0].count),
+    owner_email: owner.rows[0]?.email || null
+});
     }
 
     res.json(resultado);
@@ -747,7 +755,7 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         const lic = rows[0];
 
-        // 🔹 valida licença primeiro (ANTES de qualquer coisa)
+        // 🔹 valida licença primeiro
         if (!lic) {
             return res.status(404).json({ erro: "Licença não encontrada" });
         }
@@ -767,7 +775,7 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         const total = Number(count.rows[0].count);
 
-        // 🔥 bloqueia se atingir limite
+        // 🔥 limite de usuários
         if (total >= lic.max_usuarios) {
             return res.status(403).json({ erro: "Limite de usuários atingido" });
         }
@@ -795,32 +803,34 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
             isOwner = true;
         }
 
-        // 🔹 insere usuário
-        await pool.query(
-    `
-    INSERT INTO usuarios (
-        nome,
-        email,
-        senha,
-        licenca_chave,
-        is_owner,
-        criado_em,
-        updated_at
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `,
-    [nome, email, senhaHash, chave, isOwner, Date.now(), Date.now()]
-);
+        // 🔹 INSERT CORRETO (COM RETURNING)
+        const resultInsert = await pool.query(
+            `
+            INSERT INTO usuarios (
+                nome,
+                email,
+                senha,
+                licenca_chave,
+                is_owner,
+                criado_em,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
+            `,
+            [nome, email, senhaHash, chave, isOwner, Date.now(), Date.now()]
+        );
 
         console.log("✅ Usuário criado com sucesso");
 
-     res.json({
-    sucesso: true,
-    id: resultInsert.rows[0].id
-});
+        // 🔥 RESPOSTA CORRETA
+        res.json({
+            sucesso: true,
+            id: resultInsert.rows[0].id
+        });
 
     } catch (err) {
-        console.error("❌ ERRO CRIAR USUARIO:", err.message);
+        console.error("❌ ERRO CRIAR USUARIO:", err);
         res.status(500).json({ erro: "Erro interno", detalhe: err.message });
     }
 });
