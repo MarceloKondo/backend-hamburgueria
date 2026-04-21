@@ -163,7 +163,10 @@ app.get("/api/v1/licenca/painel", async (req, res) => {
 
     for (let lic of rows) {
         const count = await pool.query(
-            "SELECT COUNT(*) FROM usuarios WHERE licenca_chave=$1",
+           SELECT COUNT(*)   
+        FROM usuarios 
+        WHERE licenca_chave=$1 
+        AND deleted IS NOT TRUE,
             [lic.chave]
         );
 
@@ -816,7 +819,7 @@ app.get("/api/v1/licenca/usuarios", async (req, res) => {
     let query = `
         SELECT id, nome, email, criado_em, is_owner, updated_at, deleted
         FROM usuarios 
-        WHERE licenca_chave=$1
+       WHERE licenca_chave=$1 AND deleted IS NOT TRUE
     `;
 
     const params = [chave];
