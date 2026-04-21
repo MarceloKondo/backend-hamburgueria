@@ -4,67 +4,156 @@ const jwt = require("jsonwebtoken")
 
 const SECRET = "segredo_super_forte"
 
-async function listarUsuarios(req,res){
+// =============================
+// LISTAR USUÁRIOS (COM LICENÇA)
+// =============================
+async function listarUsuarios(req, res) {
 
-    try{
+    try {
 
-        const resultado = await pool.query("SELECT id,nome,email FROM usuarios")
+        const { licenca } = req.query
 
-        res.json(resultado.rows)
+        if (!licenca) {
+            return res.status(400).send("Licença obrigatória")
+        }
 
-    }catch(erro){
+        const resultado = await pool.query(
+            `
+            SELECT id, nome, email, is_owner, created_at, updated_at
+            FROM usuarios
+            WHERE licenca_chave = $1
+            AND deleted IS NOT TRUE
+            ORDER BY id DESC
+            `,
+            [licenca]
+        )
+
+        res.json({
+            lista: resultado.rows
+        })
+
+    } catch (erro) {
 
         console.error(erro)
         res.status(500).send("Erro ao buscar usuarios")
 
     }
-
 }
 
-async function criarUsuario(req,res){
+// =============================
+// CRIAR USUÁRIO (COM LICENÇA)
+// =============================
+async function criarUsuario(req, res) {
 
-    try{
+    try {
 
-        const { nome, email, senha } = req.body
+        const { nome, email, senha, licenca } = req.body
 
-        const senhaHash = await bcrypt.hash(senha,10)
+        if (!nome || !email || !senha || !licenca) {
+            return res.status(400).send("Dados obrigatórios faltando")
+        }
 
-        const resultado = await pool.query(
-            "INSERT INTO usuarios (nome,email,senha) VALUES ($1,$2,$3) RETURNING id,nome,email",
-            [nome,email,senhaHash]
+        // verifica licença
+        const lic = await pool.query(
+            "SELECT * FROM licencas WHERE chave = $1",
+            [licenca]
         )
 
-        res.json(resultado.rows[0])
+        if (lic.rows.length === 0) {
+            return res.status(404).send("Licença não encontrada")
+        }
 
-    }catch(erro){
+        const senhaHash = await bcrypt.hash(senha, 10)
+
+        // conta usuários ativos da licença
+        const count = await pool.query(
+            `
+            SELECT COUNT(*) 
+            FROM usuarios 
+            WHERE licenca_chave=$1 
+            AND deleted IS NOT TRUE
+            `,
+            [licenca]
+        )
+
+        const total = Number(count.rows[0].count)
+
+        if (total >= lic.rows[0].max_usuarios) {
+            return res.status(403).send("Limite de usuários atingido")
+        }
+
+        // garante 1 owner por licença
+        const ownerExistente = await pool.query(
+            `
+            SELECT id FROM usuarios
+            WHERE licenca_chave=$1
+            AND is_owner = true
+            AND deleted IS NOT TRUE
+            LIMIT 1
+            `,
+            [licenca]
+        )
+
+        const isOwner = ownerExistente.rowCount === 0
+
+        const resultado = await pool.query(
+            `
+            INSERT INTO usuarios (
+                nome,
+                email,
+                senha,
+                licenca_chave,
+                is_owner,
+                created_at,
+                updated_at
+            )
+            VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
+            RETURNING id, nome, email
+            `,
+            [nome, email, senhaHash, licenca, isOwner]
+        )
+
+        res.json({
+            sucesso: true,
+            usuario: resultado.rows[0]
+        })
+
+    } catch (erro) {
 
         console.error(erro)
         res.status(500).send("Erro ao criar usuario")
 
     }
-
 }
 
-async function login(req,res){
+// =============================
+// LOGIN (COM LICENÇA CORRIGIDO)
+// =============================
+async function login(req, res) {
 
-    try{
+    try {
 
         const { email, senha } = req.body
 
         const resultado = await pool.query(
-            "SELECT * FROM usuarios WHERE email=$1",
+            `
+            SELECT * 
+            FROM usuarios 
+            WHERE email=$1 
+            AND deleted IS NOT TRUE
+            `,
             [email]
         )
 
-        if(resultado.rows.length === 0){
+        if (resultado.rows.length === 0) {
             return res.status(401).send("Usuario não encontrado")
         }
 
         const usuario = resultado.rows[0]
 
-        const senhaValida = await bcrypt.compare(senha,usuario.senha)
+        const senhaValida = await bcrypt.compare(senha, usuario.senha)
 
-        if(!senhaValida){
+        if (!senhaValida) {
             return res.status(401).send("Senha inválida")
         }
 
@@ -74,22 +163,24 @@ async function login(req,res){
             { expiresIn: "1d" }
         )
 
+        // 🔥 IMPORTANTE: SEM ISSO SUA LICENÇA QUEBRA NO ANDROID
         res.json({
-            usuario:{
-                id:usuario.id,
-                nome:usuario.nome,
-                email:usuario.email
-            },
-            token
+            token,
+            usuario: {
+                id: usuario.id,
+                nome: usuario.nome,
+                email: usuario.email,
+                licenca: usuario.licenca_chave || "", // 🔥 FIX CRÍTICO
+                isOwner: usuario.is_owner || false
+            }
         })
 
-    }catch(erro){
+    } catch (erro) {
 
         console.error(erro)
         res.status(500).send("Erro no login")
 
     }
-
 }
 
 module.exports = {
