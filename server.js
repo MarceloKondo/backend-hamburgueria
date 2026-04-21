@@ -832,22 +832,24 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
         }
 
         // 🔹 INSERT CORRETO (COM RETURNING)
-        const resultInsert = await pool.query(
-            `
-            INSERT INTO usuarios (
-                nome,
-                email,
-                senha,
-                licenca_chave,
-                is_owner,
-                criado_em,
-                updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING id
-            `,
-            [nome, email, senhaHash, chave, isOwner, Date.now(), Date.now()]
-        );
+        const now = Date.now();
+
+const resultInsert = await pool.query(
+    `
+    INSERT INTO usuarios (
+        nome,
+        email,
+        senha,
+        licenca_chave,
+        is_owner,
+        criado_em,
+        updated_at
+    )
+    VALUES ($1,$2,$3,$4,$5,$6,$7)
+    RETURNING id, nome, email, updated_at
+    `,
+    [nome, email, senhaHash, chave, isOwner, now, now]
+);
 
         console.log("✅ Usuário criado com sucesso");
 
@@ -869,10 +871,11 @@ app.get("/api/v1/licenca/usuarios", async (req, res) => {
 
     const { chave, lastSync } = req.query;
 let query = `
-    SELECT id, nome, email, criado_em, is_owner, updated_at, deleted
+    SELECT id, nome, email, is_owner, criado_em, updated_at, deleted
     FROM usuarios 
     WHERE licenca_chave=$1
     AND deleted IS NOT TRUE
+    AND updated_at IS NOT NULL
 `;
 
     const params = [chave];
