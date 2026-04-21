@@ -95,12 +95,12 @@ app.post("/auth/login", async (req, res) => {
     try {
         const { email, senha } = req.body;
 
-        const result = await pool.query(
-           SELECT * FROM usuarios 
-           WHERE LOWER(email)=LOWER($1) 
-        AND deleted IS NOT TRUE,
-            [email]
-        );
+  const result = await pool.query(
+    `SELECT * FROM usuarios 
+     WHERE LOWER(email)=LOWER($1) 
+     AND deleted IS NOT TRUE`,
+    [email]
+);
 
         const usuario = result.rows[0];
 
@@ -162,13 +162,13 @@ app.get("/api/v1/licenca/painel", async (req, res) => {
     const resultado = [];
 
     for (let lic of rows) {
-        const count = await pool.query(
-           SELECT COUNT(*)   
-        FROM usuarios 
-        WHERE licenca_chave=$1 
-        AND deleted IS NOT TRUE,
-            [lic.chave]
-        );
+ const count = await pool.query(
+    `SELECT COUNT(*)   
+     FROM usuarios 
+     WHERE licenca_chave=$1 
+     AND deleted IS NOT TRUE`,
+    [lic.chave]
+);
 
         resultado.push({
             ...lic,
@@ -675,7 +675,7 @@ app.post("/api/v1/produtos/deletar", async (req, res) => {
         SET deleted = true, updated_at = $1
         WHERE id = $2
         `,
-        [Date.now(), id]
+        [Date.now(), userId]
     );
 
     res.json({ ok: true });
@@ -734,10 +734,12 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
         console.log("chave:", chave);
         console.log("email:", email);
 
+        // 🔹 validação básica
         if (!chave || !email || !senha) {
             return res.status(400).json({ erro: "Dados obrigatórios faltando" });
         }
 
+        // 🔹 busca licença
         const { rows } = await pool.query(
             "SELECT * FROM licencas WHERE chave = $1",
             [chave]
@@ -745,18 +747,7 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         const lic = rows[0];
 
-// 🔥 contar usuários atuais
-const count = await pool.query(
-    "SELECT COUNT(*) FROM usuarios WHERE licenca_chave=$1 AND deleted IS NOT TRUE",
-    [chave]
-);
-
-const total = Number(count.rows[0].count);
-
-if (total >= lic.max_usuarios) {
-    return res.status(403).json({ erro: "Limite de usuários atingido" });
-}
-        
+        // 🔹 valida licença primeiro (ANTES de qualquer coisa)
         if (!lic) {
             return res.status(404).json({ erro: "Licença não encontrada" });
         }
@@ -765,40 +756,59 @@ if (total >= lic.max_usuarios) {
             return res.status(403).json({ erro: "Licença não ativa" });
         }
 
-        const bcrypt = require("bcrypt");
+        // 🔥 conta usuários (IGNORANDO deletados)
+        const count = await pool.query(
+            `SELECT COUNT(*) 
+             FROM usuarios 
+             WHERE licenca_chave=$1 
+             AND deleted IS NOT TRUE`,
+            [chave]
+        );
+
+        const total = Number(count.rows[0].count);
+
+        // 🔥 bloqueia se atingir limite
+        if (total >= lic.max_usuarios) {
+            return res.status(403).json({ erro: "Limite de usuários atingido" });
+        }
+
+        // 🔹 hash senha
         const senhaHash = await bcrypt.hash(senha, 10);
 
         console.log("🔥 Inserindo usuário...");
 
-// 🔥 GARANTE 1 OWNER REAL POR LICENÇA
-const ownerExistente = await pool.query(
-    `
-    SELECT id FROM usuarios 
-    WHERE licenca_chave = $1 AND is_owner = true
-    LIMIT 1
-    `,
-    [chave]
-);
+        // 🔥 garante 1 OWNER por licença
+        const ownerExistente = await pool.query(
+            `
+            SELECT id FROM usuarios 
+            WHERE licenca_chave = $1 
+            AND is_owner = true
+            AND deleted IS NOT TRUE
+            LIMIT 1
+            `,
+            [chave]
+        );
 
-let isOwner = false;
+        let isOwner = false;
 
-if (ownerExistente.rowCount === 0) {
-    isOwner = true;
-}
+        if (ownerExistente.rowCount === 0) {
+            isOwner = true;
+        }
 
-await pool.query(
-    `
-    INSERT INTO usuarios (
-        nome,
-        email,
-        senha,
-        licenca_chave,
-        is_owner
-    )
-    VALUES ($1, $2, $3, $4, $5)
-    `,
-    [nome, email, senhaHash, chave, isOwner]
-);
+        // 🔹 insere usuário
+        await pool.query(
+            `
+            INSERT INTO usuarios (
+                nome,
+                email,
+                senha,
+                licenca_chave,
+                is_owner
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            `,
+            [nome, email, senhaHash, chave, isOwner]
+        );
 
         console.log("✅ Usuário criado com sucesso");
 
