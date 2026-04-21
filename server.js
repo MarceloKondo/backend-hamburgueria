@@ -61,7 +61,7 @@ async function startServer() {
                 id SERIAL PRIMARY KEY,
                 cliente_nome TEXT,
                 chave TEXT UNIQUE,
-                statusFinal TEXT,
+                status_final TEXT,
                 expira_em BIGINT,
                 dispositivos INTEGER DEFAULT 0,
                 dispositivo_id TEXT,
@@ -216,8 +216,8 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
     const expira_em = agora + (diasFinal * 86400000);
 
     await pool.query(
-        "INSERT INTO licencas (cliente_nome, chave, statusFinal, expira_em, max_usuarios) VALUES ($1,$2,$3,$4,$5)",
-        [cliente, chave, "ATIVO", expira_em, max]
+      INSERT INTO licencas (cliente_nome, chave, status_final, expira_em, max_usuarios)
+VALUES ($1,$2,$3,$4,$5)
     );
 
     res.json({ ok: true, chave, dias: diasFinal });
@@ -228,13 +228,13 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
 // =============================
 app.post("/api/v1/licenca/bloquear", async (req, res) => {
     const { chave } = req.body;
-    await pool.query("UPDATE licencas SET statusFinal='BLOQUEADO' WHERE chave=$1", [chave]);
+    await pool.query("UPDATE licencas SET status_final='BLOQUEADO' WHERE chave=$1", [chave]);
     res.json({ ok: true });
 });
 
 app.post("/api/v1/licenca/desbloquear", async (req, res) => {
     const { chave } = req.body;
-    await pool.query("UPDATE licencas SET statusFinal='ATIVO' WHERE chave=$1", [chave]);
+    await pool.query("UPDATE licencas SET status_final='ATIVO' WHERE chave=$1", [chave]);
     res.json({ ok: true });
 });
 
@@ -284,7 +284,7 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
                 dispositivo_id = $1,
                 data_ativacao = $2,
                 ultimo_uso = $3,
-                statusfinal = 'ATIVO'
+                status_final = 'ATIVO'
             WHERE chave = $4
             `,
             [deviceId, Date.now(), Date.now(), chave]
