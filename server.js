@@ -851,16 +851,16 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 app.get("/api/v1/licenca/usuarios", async (req, res) => {
 
     const { chave, lastSync } = req.query;
-
-    let query = `
-        SELECT id, nome, email, criado_em, is_owner, updated_at, deleted
-        FROM usuarios 
-        WHERE licenca_chave=$1
-    `;
+let query = `
+    SELECT id, nome, email, criado_em, is_owner, updated_at, deleted
+    FROM usuarios 
+    WHERE licenca_chave=$1
+    AND deleted IS NOT TRUE
+`;
 
     const params = [chave];
 
-    if (lastSync) {
+    if (Number(lastSync) > 0) {
         query += " AND updated_at > $2";
         params.push(Number(lastSync));
     }
