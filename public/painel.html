@@ -284,19 +284,24 @@ async function carregarUsuarios(chave){
 
     let html = `<h4>Licença: ${chave}</h4>`;
 
+    // 🔥 FORM DE CRIAÇÃO
     html += `
-    <input id="nome" placeholder="Nome">
-    <input id="email" placeholder="Email">
-    <input id="senhaNovo" placeholder="Senha">
-    <button onclick="criarUsuario()">Criar</button>
+    <div style="margin-bottom:10px;">
+        <input id="nome" placeholder="Nome">
+        <input id="email" placeholder="Email">
+        <input id="senhaNovo" placeholder="Senha">
+        <button onclick="criarUsuario()">Criar</button>
+    </div>
     `;
 
-    users.forEach(u=>{
+    // 🔥 LISTA DE USUÁRIOS
+    users.forEach(u => {
 
-        const ownerTag = u.isOwner ? "👑 DONO" : "";
+        const isOwner = u.is_owner ?? u.isOwner; // 🔥 compatível com backend
+        const ownerTag = isOwner ? "👑 DONO" : "";
 
         html += `
-        <div class="card" style="${u.isOwner ? 'border:2px solid gold' : ''}">
+        <div class="card" style="${isOwner ? 'border:2px solid gold' : ''}">
             
             <div style="margin-bottom:5px;">
                 ${ownerTag}
@@ -309,7 +314,11 @@ async function carregarUsuarios(chave){
             <button onclick="resetarSenha(${u.id})">Reset</button>
             <button onclick="deletarUsuario(${u.id})">Excluir</button>
 
-            ${!u.isOwner ? `<button class="btn-yellow" onclick="setOwner(${u.id})">👑 Tornar Dono</button>` : ""}
+            ${!isOwner ? `
+                <button class="btn-yellow" onclick="setOwner(${u.id})">
+                    👑 Tornar Dono
+                </button>
+            ` : ""}
         </div>
         `;
     });
@@ -361,6 +370,21 @@ async function resetarSenha(id){
     alert("Senha atualizada");
 }
 
+async function setOwner(id){
+
+    await fetch(API + "/set-owner", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+            chave: licencaSelecionada,
+            userId: id
+        })
+    });
+
+    alert("Owner atualizado!");
+    carregarUsuarios(licencaSelecionada);
+}
+    
 async function deletarUsuario(id){
     if(!confirm("Excluir usuário?")) return;
 
@@ -382,6 +406,7 @@ setInterval(()=>{
 if(localStorage.getItem("auth") === "ok"){
     iniciarPainel();
 }
+    
 
 </script>
 
