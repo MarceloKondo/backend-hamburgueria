@@ -163,6 +163,7 @@ app.get("/api/v1/app/versao", async (req, res) => {
         });
     }
 });
+
 // =============================
 // 🔹 PAINEL (COM USUÁRIOS)
 // =============================
@@ -199,52 +200,67 @@ resultado.push({
 });
 
 // =============================
-// 🔹 GERAR LICENÇA
+// 🔹 EVENTOS
 // =============================
-app.post("/api/v1/licenca/gerar", async (req, res) => {
+app.post("/api/v1/licenca/evento", async (req, res) => {
 
-    const { cliente, dias, maxUsuarios } = req.body;
+    const { evento, email, deviceId } = req.body;
 
-    const diasNum = Number(dias);
-    const diasFinal = (!diasNum || isNaN(diasNum) || diasNum <= 0) ? 30 : diasNum;
+    await pool.query(
+        "INSERT INTO eventos (tipo, email, device_id, data) VALUES ($1,$2,$3,$4)",
+        [evento, email, deviceId, Date.now()]
+    );
 
-    const max = (!maxUsuarios || isNaN(maxUsuarios) || maxUsuarios <= 0) ? 3 : Number(maxUsuarios);
-
-    const chave = require("crypto").randomBytes(16).toString("hex");
-
-    const agora = Date.now();
-    const expira_em = agora + (diasFinal * 86400000);
-
-  await pool.query(
-    `
-    INSERT INTO licencas (
-        cliente_nome,
-        chave,
-        status_final,
-        expira_em,
-        max_usuarios
-    )
-    VALUES ($1,$2,$3,$4,$5)
-    `,
-    [cliente, chave, "ATIVO", expira_em, max]
-);
-
-    res.json({ ok: true, chave, dias: diasFinal });
-});
-
-// =============================
-// 🔹 BLOQUEAR / DESBLOQUEAR
-// =============================
-app.post("/api/v1/licenca/bloquear", async (req, res) => {
-    const { chave } = req.body;
-    await pool.query("UPDATE licencas SET status_final='BLOQUEADO' WHERE chave=$1", [chave]);
     res.json({ ok: true });
 });
 
-app.post("/api/v1/licenca/desbloquear", async (req, res) => {
-    const { chave } = req.body;
-    await pool.query("UPDATE licencas SET status_final='ATIVO' WHERE chave=$1", [chave]);
-    res.json({ ok: true });
+app.get("/api/v1/licenca/evento", async (req, res) => {
+
+    const { rows } = await pool.query(
+        "SELECT * FROM eventos ORDER BY id DESC LIMIT 100"
+    );
+
+    res.json(rows);
+});
+
+// =============================
+// 🔹 DEFINIR OWNER 
+// =============================
+app.post("/api/v1/licenca/set-owner", async (req, res) => {
+    const { id } = req.body;
+
+    try {
+
+        // 🔥 pega licença do usuário
+        const { rows } = await pool.query(
+            "SELECT licenca_chave FROM usuarios WHERE id=$1",
+            [id]
+        );
+
+        const chave = rows[0]?.licenca_chave;
+
+        if (!chave) {
+            return res.status(404).json({ erro: "Usuário não encontrado" });
+        }
+
+        // 🔥 remove owner de todos
+        await pool.query(
+            "UPDATE usuarios SET is_owner = false WHERE licenca_chave=$1",
+            [chave]
+        );
+
+        // 🔥 define novo owner
+        await pool.query(
+            "UPDATE usuarios SET is_owner = true WHERE id=$1",
+            [id]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro interno" });
+    }
 });
 
 // =============================
@@ -308,6 +324,41 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
         res.status(500).json({ erro: "Erro interno" });
     }
 });
+
+// =============================
+// 🔹 GERAR LICENÇA
+// =============================
+app.post("/api/v1/licenca/gerar", async (req, res) => {
+
+    const { cliente, dias, maxUsuarios } = req.body;
+
+    const diasNum = Number(dias);
+    const diasFinal = (!diasNum || isNaN(diasNum) || diasNum <= 0) ? 30 : diasNum;
+
+    const max = (!maxUsuarios || isNaN(maxUsuarios) || maxUsuarios <= 0) ? 3 : Number(maxUsuarios);
+
+    const chave = require("crypto").randomBytes(16).toString("hex");
+
+    const agora = Date.now();
+    const expira_em = agora + (diasFinal * 86400000);
+
+  await pool.query(
+    `
+    INSERT INTO licencas (
+        cliente_nome,
+        chave,
+        status_final,
+        expira_em,
+        max_usuarios
+    )
+    VALUES ($1,$2,$3,$4,$5)
+    `,
+    [cliente, chave, "ATIVO", expira_em, max]
+);
+
+    res.json({ ok: true, chave, dias: diasFinal });
+});
+
 // =============================
 // 🔹 VALIDAR (CORRIGIDO)
 // =============================
@@ -398,70 +449,6 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
 });
 
 // =============================
-// 🔹 EVENTOS
-// =============================
-app.post("/api/v1/licenca/evento", async (req, res) => {
-
-    const { evento, email, deviceId } = req.body;
-
-    await pool.query(
-        "INSERT INTO eventos (tipo, email, device_id, data) VALUES ($1,$2,$3,$4)",
-        [evento, email, deviceId, Date.now()]
-    );
-
-    res.json({ ok: true });
-});
-
-app.get("/api/v1/licenca/evento", async (req, res) => {
-
-    const { rows } = await pool.query(
-        "SELECT * FROM eventos ORDER BY id DESC LIMIT 100"
-    );
-
-    res.json(rows);
-});
-
-// =============================
-// 🔹 DEFINIR OWNER 
-// =============================
-app.post("/api/v1/licenca/set-owner", async (req, res) => {
-    const { id } = req.body;
-
-    try {
-
-        // 🔥 pega licença do usuário
-        const { rows } = await pool.query(
-            "SELECT licenca_chave FROM usuarios WHERE id=$1",
-            [id]
-        );
-
-        const chave = rows[0]?.licenca_chave;
-
-        if (!chave) {
-            return res.status(404).json({ erro: "Usuário não encontrado" });
-        }
-
-        // 🔥 remove owner de todos
-        await pool.query(
-            "UPDATE usuarios SET is_owner = false WHERE licenca_chave=$1",
-            [chave]
-        );
-
-        // 🔥 define novo owner
-        await pool.query(
-            "UPDATE usuarios SET is_owner = true WHERE id=$1",
-            [id]
-        );
-
-        res.json({ ok: true });
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: "Erro interno" });
-    }
-});
-
-// =============================
 // 🔹 DELETAR LICENÇA
 // =============================
 app.post("/api/v1/licenca/deletar", async (req, res) => {
@@ -512,6 +499,23 @@ app.post("/api/v1/licenca/renovar", async (req, res) => {
 
     res.json({ ok: true });
 });
+
+// =============================
+// 🔹 BLOQUEAR / DESBLOQUEAR
+// =============================
+app.post("/api/v1/licenca/bloquear", async (req, res) => {
+    const { chave } = req.body;
+    await pool.query("UPDATE licencas SET status_final='BLOQUEADO' WHERE chave=$1", [chave]);
+    res.json({ ok: true });
+});
+
+app.post("/api/v1/licenca/desbloquear", async (req, res) => {
+    const { chave } = req.body;
+    await pool.query("UPDATE licencas SET status_final='ATIVO' WHERE chave=$1", [chave]);
+    res.json({ ok: true });
+});
+
+
 // =============================
 // 🔹 PRATOS 
 // =============================
@@ -698,6 +702,7 @@ app.post("/api/v1/produtos/editar", async (req, res) => {
         res.status(500).json({ erro: "Erro interno" });
     }
 });
+
 // =============================
 // 🔹 PRODUTOS DELETAR
 // =============================
@@ -716,6 +721,7 @@ app.post("/api/v1/produtos/deletar", async (req, res) => {
 
     res.json({ ok: true });
 });
+
 // =============================
 // 🔹 PRODUTOS CRIAR
 // =============================
@@ -758,6 +764,95 @@ app.post("/api/v1/produtos/criar", async (req, res) => {
 
     res.json({ id: rows[0].id });
 });
+
+// =============================
+// 🔹 PERMISSOES USUARIO
+// =============================
+app.get("/api/v1/licenca/permissoes", async (req, res) => {
+
+    try {
+
+        const { chave, usuarioId } = req.query;
+
+        if (!chave || !usuarioId) {
+            return res.status(400).json({ erro: "Dados obrigatórios" });
+        }
+
+        const { rows } = await pool.query(
+            `
+            SELECT id, usuario_id, codigo_acao, pode_executar, exige_senha, updated_at
+            FROM usuario_permissoes
+            WHERE licenca_chave = $1
+            AND usuario_id = $2
+            `,
+            [chave, usuarioId]
+        );
+
+        res.json({
+            lista: rows
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro interno" });
+    }
+});
+
+// =============================
+// 🔹 SALVAR PERMISSOES
+// =============================
+
+app.post("/api/v1/licenca/permissoes/salvar", async (req, res) => {
+
+    try {
+
+        const {
+            chave,
+            usuarioId,
+            codigoAcao,
+            podeExecutar,
+            exigeSenha
+        } = req.body;
+
+        if (!chave || !usuarioId || !codigoAcao) {
+            return res.status(400).json({ erro: "Dados obrigatórios" });
+        }
+
+        await pool.query(
+            `
+            INSERT INTO usuario_permissoes (
+                licenca_chave,
+                usuario_id,
+                codigo_acao,
+                pode_executar,
+                exige_senha,
+                updated_at
+            )
+            VALUES ($1,$2,$3,$4,$5,$6)
+            ON CONFLICT (usuario_id, codigo_acao, licenca_chave)
+            DO UPDATE SET
+                pode_executar = EXCLUDED.pode_executar,
+                exige_senha = EXCLUDED.exige_senha,
+                updated_at = EXCLUDED.updated_at
+            `,
+            [
+                chave,
+                usuarioId,
+                codigoAcao,
+                podeExecutar,
+                exigeSenha,
+                Date.now()
+            ]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro interno" });
+    }
+});
+
 // =============================
 // 🔹 CRIAR USUÁRIO (AJUSTADO AO SEU BANCO)
 // =============================
