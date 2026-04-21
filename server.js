@@ -264,7 +264,7 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
             return res.status(404).json({ erro: "Licença não encontrada" });
         }
 
-        if (lic.statusfinal === "BLOQUEADO") {
+        if (lic.status_final === "BLOQUEADO") {
             console.log("❌ Licença bloqueada");
             return res.status(403).json({ erro: "Bloqueado" });
         }
@@ -329,7 +329,7 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
 
         // 🔥 LOG COMPLETO
         console.log("📦 Licença encontrada:", {
-            status: lic.statusfinal,
+            status: lic.status_final,
             deviceSalvo: lic.dispositivo_id,
             expiraEm
         });
@@ -356,8 +356,8 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
         }
 
         // 🔥 STATUS
-        if (lic.statusfinal !== "ATIVO") {
-            console.log("❌ Status não ativo:", lic.statusfinal);
+        if (lic.status_final !== "ATIVO") {
+            console.log("❌ Status não ativo:", lic.status_final);
             return res.json({ valida: false });
         }
 
@@ -771,7 +771,7 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
             return res.status(404).json({ erro: "Licença não encontrada" });
         }
 
-        if (lic.statusfinal !== "ATIVO") {
+        if (lic.status_final !== "ATIVO") {
             return res.status(403).json({ erro: "Licença não ativa" });
         }
 
