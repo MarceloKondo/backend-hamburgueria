@@ -381,6 +381,41 @@ app.get("/api/v1/licenca/evento", async (req, res) => {
 });
 
 // =============================
+// 🔹 DEFINIR OWNER 
+// =============================
+app.post("/api/v1/licenca/set-owner", async (req, res) => {
+    try {
+
+        const { chave, userId } = req.body;
+
+        if (!chave || !userId) {
+            return res.status(400).json({ erro: "Dados inválidos" });
+        }
+
+        // 🔥 remove owner atual
+        await pool.query(
+            `UPDATE usuarios 
+             SET is_owner = false 
+             WHERE licenca_chave = $1`,
+            [chave]
+        );
+
+        // 🔥 seta novo owner
+        await pool.query(
+            `UPDATE usuarios 
+             SET is_owner = true 
+             WHERE id = $1 AND licenca_chave = $2`,
+            [userId, chave]
+        );
+
+        res.json({ ok: true });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro interno" });
+    }
+});
+// =============================
 // 🔹 DELETAR LICENÇA
 // =============================
 app.post("/api/v1/licenca/deletar", async (req, res) => {
@@ -706,17 +741,21 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         console.log("🔥 Inserindo usuário...");
 
-   // 🔥 verifica se já existe owner nessa licença
+// 🔥 GARANTE 1 OWNER REAL POR LICENÇA
 const ownerExistente = await pool.query(
     `
-    SELECT 1 FROM usuarios 
+    SELECT id FROM usuarios 
     WHERE licenca_chave = $1 AND is_owner = true
     LIMIT 1
     `,
     [chave]
 );
 
-const isOwner = ownerExistente.rowCount === 0;
+let isOwner = false;
+
+if (ownerExistente.rowCount === 0) {
+    isOwner = true;
+}
 
 await pool.query(
     `
