@@ -292,14 +292,24 @@ async function carregarUsuarios(chave){
     `;
 
     users.forEach(u=>{
+
+        const ownerTag = u.isOwner ? "👑 DONO" : "";
+
         html += `
-        <div class="card">
+        <div class="card" style="${u.isOwner ? 'border:2px solid gold' : ''}">
+            
+            <div style="margin-bottom:5px;">
+                ${ownerTag}
+            </div>
+
             <input id="n_${u.id}" value="${u.nome}">
             <input id="e_${u.id}" value="${u.email}">
 
             <button onclick="editar(${u.id})">Salvar</button>
             <button onclick="resetarSenha(${u.id})">Reset</button>
             <button onclick="deletarUsuario(${u.id})">Excluir</button>
+
+            ${!u.isOwner ? `<button class="btn-yellow" onclick="setOwner(${u.id})">👑 Tornar Dono</button>` : ""}
         </div>
         `;
     });
