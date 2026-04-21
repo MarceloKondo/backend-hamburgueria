@@ -280,7 +280,8 @@ async function carregarEventos(){
 async function carregarUsuarios(chave){
 
     const res = await fetch(API+`/usuarios?chave=${chave}`);
-    const users = await res.json();
+    const data = await res.json();
+    const users = data.lista || [];
 
     let html = `<h4>Licença: ${chave}</h4>`;
 
