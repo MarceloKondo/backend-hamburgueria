@@ -215,10 +215,19 @@ app.post("/api/v1/licenca/gerar", async (req, res) => {
     const agora = Date.now();
     const expira_em = agora + (diasFinal * 86400000);
 
-    await pool.query(
-      INSERT INTO licencas (cliente_nome, chave, status_final, expira_em, max_usuarios)
-VALUES ($1,$2,$3,$4,$5)
-    );
+  await pool.query(
+    `
+    INSERT INTO licencas (
+        cliente_nome,
+        chave,
+        status_final,
+        expira_em,
+        max_usuarios
+    )
+    VALUES ($1,$2,$3,$4,$5)
+    `,
+    [cliente, chave, "ATIVO", expira_em, max]
+);
 
     res.json({ ok: true, chave, dias: diasFinal });
 });
@@ -688,14 +697,14 @@ app.post("/api/v1/produtos/deletar", async (req, res) => {
 
     const { id } = req.body;
 
-    await pool.query(
-        `
-        UPDATE produtos
-        SET deleted = true, updated_at = $1
-        WHERE id = $2
-        `,
-        [Date.now(),]
-    );
+ await pool.query(
+    `
+    UPDATE produtos
+    SET deleted = true, updated_at = $1
+    WHERE id = $2
+    `,
+    [Date.now(), id]
+);
 
     res.json({ ok: true });
 });
