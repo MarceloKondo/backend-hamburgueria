@@ -740,6 +740,18 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         const lic = rows[0];
 
+// 🔥 contar usuários atuais
+const count = await pool.query(
+    "SELECT COUNT(*) FROM usuarios WHERE licenca_chave=$1 AND deleted IS NOT TRUE",
+    [chave]
+);
+
+const total = Number(count.rows[0].count);
+
+if (total >= lic.max_usuarios) {
+    return res.status(403).json({ erro: "Limite de usuários atingido" });
+}
+        
         if (!lic) {
             return res.status(404).json({ erro: "Licença não encontrada" });
         }
