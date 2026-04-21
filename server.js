@@ -507,9 +507,10 @@ app.post("/api/v1/pratos/salvar", async (req, res) => {
         let pratoId = id;
 
         // =========================
-        // CREATE ou UPDATE PRATO
+        // 1. CREATE OU UPDATE PRATO
         // =========================
         if (!id) {
+
             const result = await pool.query(
                 `INSERT INTO prato (nome, canal, data_venda)
                  VALUES ($1, $2, $3)
@@ -518,7 +519,9 @@ app.post("/api/v1/pratos/salvar", async (req, res) => {
             );
 
             pratoId = result.rows[0].id;
+
         } else {
+
             await pool.query(
                 `UPDATE prato SET nome=$1, canal=$2 WHERE id=$3`,
                 [nome, canal || "", id]
@@ -532,13 +535,14 @@ app.post("/api/v1/pratos/salvar", async (req, res) => {
         }
 
         // =========================
-        // INGREDIENTES
+        // 2. RECRIA INGREDIENTES
         // =========================
         for (const ing of ingredientes) {
+
             await pool.query(
-                `INSERT INTO prato_ingrediente 
-                 (prato_id, ingrediente_id, quantidade, preco_medio, nome)
-                 VALUES ($1, $2, $3, $4, $5)`,
+                `INSERT INTO prato_ingrediente
+                (prato_id, ingrediente_id, quantidade, preco_medio, nome)
+                VALUES ($1, $2, $3, $4, $5)`,
                 [
                     pratoId,
                     ing.ingredienteId,
@@ -549,10 +553,13 @@ app.post("/api/v1/pratos/salvar", async (req, res) => {
             );
         }
 
-        res.json({ ok: true, id: pratoId });
+        res.json({
+            ok: true,
+            id: pratoId
+        });
 
     } catch (err) {
-        console.error("ERRO PRATO:", err);
+        console.error("❌ ERRO PRATO SYNC:", err);
         res.status(500).json({ erro: "erro interno" });
     }
 });
