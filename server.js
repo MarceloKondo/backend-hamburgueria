@@ -96,7 +96,9 @@ app.post("/auth/login", async (req, res) => {
         const { email, senha } = req.body;
 
         const result = await pool.query(
-            "SELECT * FROM usuarios WHERE LOWER(email)=LOWER($1)",
+           SELECT * FROM usuarios 
+           WHERE LOWER(email)=LOWER($1) 
+        AND deleted IS NOT TRUE,
             [email]
         );
 
@@ -245,7 +247,7 @@ app.post("/api/v1/licenca/ativar", async (req, res) => {
             return res.status(403).json({ erro: "Bloqueado" });
         }
 
-        const expira = Number(lic.expira_em);
+        const expira = parseInt(lic.expira_em);
 
         if (Date.now() > expira) {
             console.log("❌ Licença expirada");
@@ -301,7 +303,7 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
         }
 
         const agora = Date.now();
-        const expiraEm = Number(lic.expira_em);
+       const expiraEm = parseInt(lic.expira_em);
 
         // 🔥 LOG COMPLETO
         console.log("📦 Licença encontrada:", {
@@ -870,7 +872,7 @@ app.post("/api/v1/licenca/resetar-senha", async (req, res) => {
 // =============================
 app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
 
-    const { id } = req.body;
+    const { userId } = req.body;
 
     await pool.query(
         `UPDATE usuarios SET deleted = true, updated_at = $1 WHERE id=$2`,
