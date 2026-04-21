@@ -95,11 +95,10 @@ app.post("/auth/login", async (req, res) => {
     try {
         const { email, senha, chave } = req.body;
 
-  const result = await pool.query(
+const result = await pool.query(
     `SELECT * FROM usuarios 
-WHERE LOWER(email)=LOWER($1) 
-AND licenca_chave = $2
-AND deleted IS NOT TRUE`,
+     WHERE LOWER(email)=LOWER($1) 
+     AND deleted IS NOT TRUE`,
     [email]
 );
 
@@ -798,22 +797,27 @@ app.post("/api/v1/licenca/criar-usuario", async (req, res) => {
 
         // 🔹 insere usuário
         await pool.query(
-            `
-            INSERT INTO usuarios (
-                nome,
-                email,
-                senha,
-                licenca_chave,
-                is_owner
-            )
-            VALUES ($1, $2, $3, $4, $5)
-            `,
-            [nome, email, senhaHash, chave, isOwner]
-        );
+    `
+    INSERT INTO usuarios (
+        nome,
+        email,
+        senha,
+        licenca_chave,
+        is_owner,
+        criado_em,
+        updated_at
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `,
+    [nome, email, senhaHash, chave, isOwner, Date.now(), Date.now()]
+);
 
         console.log("✅ Usuário criado com sucesso");
 
-        res.json({ sucesso: true });
+     res.json({
+    sucesso: true,
+    id: resultInsert.rows[0].id
+});
 
     } catch (err) {
         console.error("❌ ERRO CRIAR USUARIO:", err.message);
@@ -895,7 +899,7 @@ app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
     await pool.query(
         `UPDATE usuarios 
          SET deleted = true, updated_at = $1 
-         WHERE id = $2`,
+         WHERE id=$2`,
         [Date.now(), id]
     );
 
