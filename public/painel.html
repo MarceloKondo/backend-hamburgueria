@@ -183,7 +183,7 @@ async function carregar(){
 
         const status = l.statusFinal || "-";
 
-        let diff = (l.expira_em || 0) - Date.now();
+        let diff = Number(l.expira_em) - Date.now();
         let dias = Math.floor(diff / 86400000);
         if(isNaN(dias) || dias < 0) dias = 0;
 
