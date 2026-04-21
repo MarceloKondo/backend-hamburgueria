@@ -378,6 +378,14 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
 
         console.log("✅ Licença válida");
 
+    res.json({
+    valida: true,
+    expiraEm: expiraEm,
+    chave: lic.chave,
+    status: lic.status_final,
+    dispositivoId: lic.dispositivo_id
+    });
+        
         res.json({
             valida: true,
             expiraEm: expiraEm
