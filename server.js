@@ -384,28 +384,32 @@ app.get("/api/v1/licenca/evento", async (req, res) => {
 // 🔹 DEFINIR OWNER 
 // =============================
 app.post("/api/v1/licenca/set-owner", async (req, res) => {
+    const { id } = req.body;
+
     try {
 
-        const { chave, userId } = req.body;
+        // 🔥 pega licença do usuário
+        const { rows } = await pool.query(
+            "SELECT licenca_chave FROM usuarios WHERE id=$1",
+            [id]
+        );
 
-        if (!chave || !userId) {
-            return res.status(400).json({ erro: "Dados inválidos" });
+        const chave = rows[0]?.licenca_chave;
+
+        if (!chave) {
+            return res.status(404).json({ erro: "Usuário não encontrado" });
         }
 
-        // 🔥 remove owner atual
+        // 🔥 remove owner de todos
         await pool.query(
-            `UPDATE usuarios 
-             SET is_owner = false 
-             WHERE licenca_chave = $1`,
+            "UPDATE usuarios SET is_owner = false WHERE licenca_chave=$1",
             [chave]
         );
 
-        // 🔥 seta novo owner
+        // 🔥 define novo owner
         await pool.query(
-            `UPDATE usuarios 
-             SET is_owner = true 
-             WHERE id = $1 AND licenca_chave = $2`,
-            [userId, chave]
+            "UPDATE usuarios SET is_owner = true WHERE id=$1",
+            [id]
         );
 
         res.json({ ok: true });
@@ -415,6 +419,7 @@ app.post("/api/v1/licenca/set-owner", async (req, res) => {
         res.status(500).json({ erro: "Erro interno" });
     }
 });
+
 // =============================
 // 🔹 DELETAR LICENÇA
 // =============================
