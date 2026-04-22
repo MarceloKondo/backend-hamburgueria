@@ -23,7 +23,7 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-app.get("/app.apk", (req, res) => {
+app.get("/Dominus.apk", (req, res) => {
     res.download(path.resolve(__dirname, "app.apk"));
 });
 
