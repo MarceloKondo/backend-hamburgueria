@@ -104,8 +104,8 @@ startServer();
 app.get("/api/v1/app/versao", async (req, res) => {
     try {
         res.json({
-            versionCode: 2,
-            versionName: "1.0.2",
+            versionCode: 1,
+            versionName: "1.0.0",
             forceUpdate: true,
             apkUrl: "https://hamburgueria-api-74br.onrender.com/Dominus.apk",
             mensagem: "Atualização obrigatória disponível!!"
