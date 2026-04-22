@@ -98,52 +98,6 @@ async function startServer() {
 }
 
 startServer();
-
-// =============================
-// 🔹 LOGIN
-// =============================
-app.post("/auth/login", async (req, res) => {
-    try {
-        const { email, senha, chave } = req.body;
-
-const result = await pool.query(
-    `SELECT * FROM usuarios 
-     WHERE LOWER(email)=LOWER($1) 
-     AND deleted IS NOT TRUE`,
-    [email]
-);
-
-        const usuario = result.rows[0];
-
-        if (!usuario) {
-            return res.status(401).json({ erro: "Usuário não encontrado" });
-        }
-
-        const senhaValida = await bcrypt.compare(senha, usuario.senha);
-
-        if (!senhaValida) {
-            return res.status(401).json({ erro: "Senha inválida" });
-        }
-
-        const token = jwt.sign({ id: usuario.id }, SECRET, { expiresIn: "1h" });
-
-        res.json({
-            token,
-            usuario: {
-    id: usuario.id,
-    nome: usuario.nome,
-    email: usuario.email,
-    licenca: usuario.licenca_chave,
-    isOwner: usuario.is_owner // 🔥 AQUI
-}
-        });
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: "Erro interno" });
-    }
-});
-
 // =============================
 // 🔹 IMPORTANTE - APP VERSAO
 // =============================
@@ -1040,4 +994,48 @@ app.post("/api/v1/licenca/deletar-usuario", async (req, res) => {
     );
 
     res.json({ ok: true });
+});
+// =============================
+// 🔹 LOGIN
+// =============================
+app.post("/auth/login", async (req, res) => {
+    try {
+        const { email, senha, chave } = req.body;
+
+const result = await pool.query(
+    `SELECT * FROM usuarios 
+     WHERE LOWER(email)=LOWER($1) 
+     AND deleted IS NOT TRUE`,
+    [email]
+);
+
+        const usuario = result.rows[0];
+
+        if (!usuario) {
+            return res.status(401).json({ erro: "Usuário não encontrado" });
+        }
+
+        const senhaValida = await bcrypt.compare(senha, usuario.senha);
+
+        if (!senhaValida) {
+            return res.status(401).json({ erro: "Senha inválida" });
+        }
+
+        const token = jwt.sign({ id: usuario.id }, SECRET, { expiresIn: "1h" });
+
+        res.json({
+            token,
+            usuario: {
+    id: usuario.id,
+    nome: usuario.nome,
+    email: usuario.email,
+    licenca: usuario.licenca_chave,
+    isOwner: usuario.is_owner // 🔥 AQUI
+}
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: "Erro interno" });
+    }
 });
