@@ -24,7 +24,7 @@ const pool = new Pool({
 });
 
 app.get("/Dominus.apk", (req, res) => {
-    res.download(path.resolve(__dirname, "app.apk"));
+    res.download(path.resolve(__dirname, "Dominus.apk"));
 });
 
 // =============================
