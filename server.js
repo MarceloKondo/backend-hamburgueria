@@ -914,18 +914,18 @@ const resultInsert = await pool.query(
     }
 });
 // =============================
-// 🔹 USUÁRIOS (COM SYNC)
+// 🔹 USUÁRIOS (lista)
 // =============================
 app.get("/api/v1/licenca/usuarios", async (req, res) => {
 
     const { chave, lastSync } = req.query;
-let query = `
-    SELECT id, nome, email, is_owner, criado_em, updated_at, deleted
-    FROM usuarios 
-    WHERE licenca_chave=$1
-    AND deleted IS NOT TRUE
-    AND updated_at IS NOT NULL
-`;
+
+    let query = `
+        SELECT id, nome, email, is_owner, criado_em, updated_at, deleted
+        FROM usuarios 
+        WHERE licenca_chave = $1
+        AND deleted IS NOT TRUE
+    `;
 
     const params = [chave];
 
@@ -934,7 +934,7 @@ let query = `
         params.push(Number(lastSync));
     }
 
-    query += " ORDER BY id DESC";
+    query += " ORDER BY updated_at DESC NULLS LAST";
 
     const { rows } = await pool.query(query, params);
 
