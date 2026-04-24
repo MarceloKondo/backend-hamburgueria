@@ -1004,14 +1004,18 @@ app.get("/api/v1/licenca/usuarios-todos", async (req, res) => {
 // =============================
 app.post("/auth/login", async (req, res) => {
     try {
-        const { email, senha, chave } = req.body;
 
-const result = await pool.query(
-    `SELECT * FROM usuarios 
-     WHERE LOWER(email)=LOWER($1) 
-     AND deleted IS NOT TRUE`,
-    [email]
-);
+        const { email, senha, deviceId } = req.body;
+
+        // =============================
+        // BUSCA USUÁRIO
+        // =============================
+        const result = await pool.query(
+            `SELECT * FROM usuarios 
+             WHERE LOWER(email)=LOWER($1) 
+             AND deleted IS NOT TRUE`,
+            [email]
+        );
 
         const usuario = result.rows[0];
 
@@ -1019,23 +1023,79 @@ const result = await pool.query(
             return res.status(401).json({ erro: "Usuário não encontrado" });
         }
 
+        // =============================
+        // VALIDA SENHA
+        // =============================
         const senhaValida = await bcrypt.compare(senha, usuario.senha);
 
         if (!senhaValida) {
             return res.status(401).json({ erro: "Senha inválida" });
         }
 
-        const token = jwt.sign({ id: usuario.id }, SECRET, { expiresIn: "1h" });
+        // =============================
+        // 🔥 GARANTE LICENÇA
+        // =============================
+        if (!usuario.licenca_chave) {
+            return res.status(403).json({ erro: "Usuário sem licença" });
+        }
+
+        // =============================
+        // 🔥 VALIDA LICENÇA
+        // =============================
+        const licResult = await pool.query(
+            "SELECT * FROM licencas WHERE chave = $1",
+            [usuario.licenca_chave]
+        );
+
+        const lic = licResult.rows[0];
+
+        if (!lic) {
+            return res.status(403).json({ erro: "Licença não encontrada" });
+        }
+
+        if (lic.status_final !== "ATIVO") {
+            return res.status(403).json({ erro: "Licença bloqueada" });
+        }
+
+        const expira = parseInt(lic.expira_em || 0);
+
+        if (Date.now() > expira) {
+            return res.status(403).json({ erro: "Licença expirada" });
+        }
+
+        // =============================
+        // 🔥 DEVICE (OPCIONAL)
+        // =============================
+        if (lic.dispositivo_id && deviceId && lic.dispositivo_id !== deviceId) {
+            return res.status(403).json({ erro: "Dispositivo não autorizado" });
+        }
+
+        // =============================
+        // 🔥 ATUALIZA USO
+        // =============================
+        await pool.query(
+            "UPDATE licencas SET ultimo_uso=$1 WHERE chave=$2",
+            [Date.now(), lic.chave]
+        );
+
+        // =============================
+        // TOKEN
+        // =============================
+        const token = jwt.sign(
+            { id: usuario.id },
+            SECRET,
+            { expiresIn: "1h" }
+        );
 
         res.json({
             token,
             usuario: {
-    id: usuario.id,
-    nome: usuario.nome,
-    email: usuario.email,
-    licenca: usuario.licenca_chave,
-    isOwner: usuario.is_owner // 🔥 AQUI
-}
+                id: usuario.id,
+                nome: usuario.nome,
+                email: usuario.email,
+                licenca: usuario.licenca_chave,
+                isOwner: usuario.is_owner
+            }
         });
 
     } catch (err) {
