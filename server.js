@@ -107,7 +107,7 @@ startServer();
 app.get("/api/v1/app/versao", async (req, res) => {
     try {
         res.json({
-            versionCode: 3,
+            versionCode: 4,
             versionName: "1.0.0",
             forceUpdate: true,
             apkUrl: "https://hamburgueria-api-74br.onrender.com/Dominus.apk",
