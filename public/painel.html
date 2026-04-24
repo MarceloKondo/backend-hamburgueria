@@ -160,14 +160,15 @@ function trocarTab(tab){
         evt.style.display = "block";
         carregarEventos();
     } 
-    else if(tab === "usuarios"){
-        usr.style.display = "block";
-        if(!licencaSelecionada){
-            document.getElementById("usuariosContent").innerHTML = "Selecione uma licença";
-        } else {
-            carregarUsuarios(licencaSelecionada);
-        }
+ else if(tab === "usuarios"){
+    usr.style.display = "block";
+
+    if(licencaSelecionada){
+        carregarUsuarios(licencaSelecionada);
+    } else {
+        carregarUsuariosTodos();
     }
+}
     else {
         lic.style.display = "block";
     }
@@ -181,7 +182,7 @@ async function carregar(){
 
     dados.forEach(l=>{
 
-        const status = l.statusFinal || "-";
+        const status = l.status_final || "-";
 
         let diff = Number(l.expira_em) - Date.now();
         let dias = Math.floor(diff / 86400000);
@@ -199,7 +200,7 @@ async function carregar(){
                 <button class="btn-red" onclick="bloquear('${l.chave}')">Bloq</button>
                 <button class="btn-green" onclick="desbloquear('${l.chave}')">OK</button>
                 <button class="btn-yellow" onclick="resetar('${l.chave}')">Reset</button>
-                <button class="btn-blue" onclick="renovar('${l.chave}')">+30d</button>
+                <button class="btn-blue" onclick="renovarPrompt('${l.chave}')">+Dias</button>
                 <button class="btn-red" onclick="deletar('${l.chave}')">Del</button>
                 <button class="btn-copy" onclick="copiar('${l.chave}')">📋</button>
             </td>
@@ -213,6 +214,35 @@ function abrirUsuarios(chave){
     licencaSelecionada = chave;
     trocarTab('usuarios');
 }
+
+async function carregarUsuariosTodos(){
+
+    const res = await fetch(API + "/usuarios-todos");
+    const data = await res.json();
+    const users = data.lista || [];
+
+    let html = `<h4>Todos os Usuários</h4>`;
+
+    users.forEach(u => {
+
+        const isOwner = u.is_owner ?? u.isOwner;
+        const ownerTag = isOwner ? "👑 DONO" : "";
+
+        html += `
+        <div class="card">
+            <div>${ownerTag}</div>
+            <div><b>${u.nome}</b></div>
+            <div>${u.email}</div>
+            <div>Licença: ${u.licenca_chave || '-'}</div>
+
+            <button onclick="deletarUsuario(${u.id})">Excluir</button>
+        </div>
+        `;
+    });
+
+    document.getElementById("usuariosContent").innerHTML = html;
+}
+
 
 async function gerar(){
     await fetch(API+"/gerar",{
@@ -327,6 +357,25 @@ async function carregarUsuarios(chave){
     document.getElementById("usuariosContent").innerHTML = html;
 }
 
+async function renovarPrompt(chave){
+
+    const dias = prompt("Quantos dias deseja adicionar?");
+
+    if(!dias || isNaN(dias)) return;
+
+    await fetch(API+"/renovar",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+            chave: chave,
+            dias: Number(dias)
+        })
+    });
+
+    carregar();
+}
+
+
 async function criarUsuario(){
 
     const nome = document.getElementById("nome").value;
@@ -376,7 +425,7 @@ async function setOwner(id){
     await fetch(API + "/set-owner", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
+        body: JSON.stringify({ id })
             chave: licencaSelecionada,
             userId: id
         })
