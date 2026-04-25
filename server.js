@@ -356,12 +356,6 @@ app.post("/api/v1/licenca/validar", async (req, res) => {
             [agora, chave]
         );
 
-        // 🔥 VALIDA DEVICE
-        if (lic.dispositivo_id && deviceId && lic.dispositivo_id !== deviceId) {
-            console.log("❌ Device diferente");
-            return res.json({ valida: false });
-        }
-
         // 🔥 PRIMEIRA ATIVAÇÃO (GRAVA DEVICE SE NÃO EXISTIR)
         if (!lic.dispositivo_id && deviceId) {
             console.log("⚠️ Gravando deviceId na licença");
@@ -1061,13 +1055,6 @@ app.post("/auth/login", async (req, res) => {
 
         if (Date.now() > expira) {
             return res.status(403).json({ erro: "Licença expirada" });
-        }
-
-        // =============================
-        // 🔥 DEVICE (OPCIONAL)
-        // =============================
-        if (lic.dispositivo_id && deviceId && lic.dispositivo_id !== deviceId) {
-            return res.status(403).json({ erro: "Dispositivo não autorizado" });
         }
 
         // =============================
